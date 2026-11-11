@@ -22,3 +22,5 @@ web/dist/
 scripts/
 CHANGELOG.md
 tests-smoke/
+
+tmp/
