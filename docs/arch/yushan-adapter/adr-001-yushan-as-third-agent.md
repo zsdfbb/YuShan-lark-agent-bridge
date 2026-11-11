@@ -96,23 +96,24 @@ bridge 的判定与真实能力一致，代价是用户无法在 `/config` 里�
 
 **后续**：若 YuShan 加了 sandbox 开关，再改这里并加对应 CLI 参数。
 
-### 决策 7：YuShan 侧只补 `--version`（并建议 `--`）
+### 决策 7：YuShan 侧只补 `--version` 与 `--`（**均已落地**）
 
-上一版清单列了四个「必须改 YuShan」的缺口。实测后收窄为**一个必做 + 一个建议**：
+上一版清单列了四个「必须改 YuShan」的缺口。实测后收窄为**一个必做 + 一个建议**，
+两者已由 YuShan `4962298`（`feat(cli): 新增 --version 与 -- 终止符`）实现。
 
-| 原判断 | 实测结论 | 修正 |
-|---|---|---|
-| G1 缺 `--version` 必须补 | `--version` 退出 1；`--help` 退出 0 且首行非空 | **保留必做**：绕法能用但 `/status` 会把标题当版本号 |
-| G2 缺 stdin / `--` 必须补 | `--` 当前被并入任务；200 KB argv 能跑；只有**整个 prompt 恰好等于** `--stats`/`--debug`/`--resume` 才炸 | **降为建议**：bridge 的 prompt 恒以 `<bridge_context>` 开头，实操不会撞 |
-| G3 缺 `--model` 必须补 | `YUSHAN_MODEL` 环境变量有效 | **撤销**：不是缺口 |
-| G4 缺 sandbox 必须补 | YuShan 无此 CLI 面且是刻意设计 | **本轮不做**（见决策 6） |
-| G5 `ModelStreamDiscarded` 无对应 | — | **bridge 侧解决**（见决策 3） |
+| 原判断 | 实测结论 | 修正 | 现状 |
+|---|---|---|---|
+| G1 缺 `--version` 必须补 | `--version` 退出 1；`--help` 退出 0 且首行非空 | **保留必做**：绕法能用但 `/status` 会把标题当版本号 | ✅ **已实现**。实测 `ys-coding-agent 0.0.1`，退出 0，stderr 零字节，不落日志（与 `--help` 同早退落点） |
+| G2 缺 stdin / `--` 必须补 | `--` 当时被并入任务；200 KB argv 能跑；只有**整个 prompt 恰好等于** `--stats`/`--debug`/`--resume` 才炸 | **降为建议**：bridge 的 prompt 恒以 `<bridge_context>` 开头，实操不会撞 | ✅ **已实现**。实测 `--json -- "--stats"` 任务文本逐字为 `--stats`。adapter 因此可**恒定**传 `--` |
+| G3 缺 `--model` 必须补 | `YUSHAN_MODEL` 环境变量有效 | **撤销**：不是缺口 | — |
+| G4 缺 sandbox 必须补 | YuShan 无此 CLI 面且是刻意设计 | **本轮不做**（见决策 6） | — |
+| G5 `ModelStreamDiscarded` 无对应 | — | **bridge 侧解决**（见决策 3） | 待实现 |
 
 ## Consequences
 
 **正面**：
 
-- YuShan 侧只需 ~5 行（`--version`）+ 可选 ~3 行（`--`），其余全在 bridge。
+- YuShan 侧改动已全部落地（`4962298`：`--version` + `--`），剩余工作**全在 bridge**。
 - 翻译边界单一（`YushanTranslator`），之上之下都是零改动，`AgentEvent` 契约不动。
 - yushan 完全复用 claude 的 sessionId 通路，`/resume`、catalog、lock 都跟着走。
 

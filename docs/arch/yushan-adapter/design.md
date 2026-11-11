@@ -85,18 +85,23 @@ $ YUSHAN_SESSIONS_DIR=/tmp/x ys-coding-agent --json "说一个字"         # 会
 
 ---
 
-## 3. 仍存在的缺口与处置
+## 3. 缺口与处置
+
+原规划的 5 个缺口，**两个已由 YuShan 侧解决**（`4962298`），两个由 bridge 侧解决，一个本轮不做。
 
 | # | 缺口 | 实测证据 | 处置 |
 |---|---|---|---|
-| **G1** | 无 `--version` | `--version` ⇒ stderr `未知参数`，**退出码 1** | **改 YuShan 加**（Y1，约 5 行）。绕法 `args:['--help']` 能通（退出 0、首行非空），但 `/status` 会把标题当版本号 |
-| **G2** | `--` 不是终止符 | `--json -- "任务文本"` ⇒ 任务文本为 `"-- 任务文本"`（`--` 被并入） | **改 YuShan 加**（Y2，约 3 行）。当前真实风险很窄，见下 |
+| **G1** | ~~无 `--version`~~ | — | ✅ **已解决**：YuShan `4962298` 已加。实测 `--version` ⇒ `ys-coding-agent 0.0.1`，退出 0，stderr 零字节，不落日志。**不再需要 `args:['--help']` 的绕法** |
+| **G2** | ~~`--` 不是终止符~~ | — | ✅ **已解决**：同上提交已加。实测 `--json -- "--stats"` 的任务文本逐字为 `--stats` |
 | **G3** | `ModelStreamDiscarded` 无 bridge 对应物 | `event.rs:100`；bridge 的 `text` 是累加的（`card/run-state.ts:55`） | **bridge 侧解决**（B1 的 B 案：攒到终局发 `final_text`），不改 YuShan、不扩契约 |
 | **G4** | 无 sandbox / 权限 CLI | 工具审批固定 `AutoApprove`（`main.rs:1263`） | **本轮不做**；`yushanCapability` 声明 `maxAccess:'full'` 让 `clampAccess` 语义正确 |
 
-### G2 的真实风险边界（实测收窄）
+### G2 的历史风险边界（现已无意义）
 
-我逐条试了「整个 prompt 恰好等于某个 flag」：
+> ⚠️ **本节记录的是 Y2 落地前的状态，保留作背景。`--` 已实现，下述风险全部消除。**
+> 实测现在 `--json -- "-foo 任务"` 与 `--json -- "--stats"` 都能正确把其后内容当任务文本。
+
+落地前我逐条试了「整个 prompt 恰好等于某个 flag」：
 
 | prompt | 结果 |
 |---|---|
@@ -107,7 +112,7 @@ $ YUSHAN_SESSIONS_DIR=/tmp/x ys-coding-agent --json "说一个字"         # 会
 
 ⇒ 唯一会炸的输入是**整个任务文本恰好等于 `--stats` / `--debug` / `--resume` 之一**。
 bridge 的 prompt 恒为 `<bridge_context>…\n\n## user_message\n\n<用户消息>`，首 token 永远不是裸 flag，
-**实操上不会撞**。故 Y2 从「必做」降为「建议做」（消除理论风险 + 让语义完整）。
+**实操上不会撞**。故 Y2 当时从「必做」降为「建议做」。**现已由 YuShan 实现。**
 
 同理，实测 200 KB 的 argv 任务能正常跑通，**长度不是问题**。
 
@@ -158,16 +163,16 @@ bridge 的 prompt 恒为 `<bridge_context>…\n\n## user_message\n\n<用户消�
 
 ```ts
 // src/agent/yushan/argv.ts
+//
+// `--` 已由 YuShan 4962298 实现，**恒定传**：它让任何以 `-` 开头（含恰好等于
+// `--stats`/`--debug`/`--resume`）的任务文本逐字成为任务，无例外。
 export function buildYushanArgs(input: {
   sessionId?: string;
   prompt: string;
-  /** Y2 落地后为 true：用 `--` 终止 flag 解析。 */
-  doubleDash?: boolean;
 }): string[] {
   const args = ['--json'];
   if (input.sessionId) args.push('--resume', input.sessionId);
-  if (input.doubleDash) args.push('--');
-  args.push(input.prompt);
+  args.push('--', input.prompt);
   return args;
 }
 ```
@@ -177,7 +182,7 @@ export function buildYushanArgs(input: {
 1. `--json`（子命令，必须在首位）
 2. `--resume <id>`（可选；`id` 不能在末尾，否则会被当成裸 `--resume` 走 picker —— 
    实测 `--resume <id> <任务>` 取 id，因为「之后还留着任务文本」）
-3. `--`（可选，Y2 后）
+3. `--`（**恒定**，YuShan 4962298 起支持）
 4. `<prompt>`（**恰好一个 token**，整段提示词）
 
 **prompt 不走 stdin**：YuShan 明确注明 `-` 是「读 stdin 的占位，本轮不支持」（`main.rs:356`）。
@@ -527,13 +532,13 @@ YuShan **明确设计**为用户输入侧不解析图片路径（`docs/design-fi
 | 步 | 内容 | 验收 |
 |---|---|---|
 | **0** | ~~验证 R1~~ | **已完成**：自定义会话目录下 `--resume` 能延续上下文（实测答出 42）；跨目录 resume 报 `找不到会话` |
-| **1** | **Y1**：YuShan 加 `--version`（~5 行 + help 一行 + 单测） | `ys-coding-agent --version` 退出 0 且输出非空 |
+| **1** | ~~**Y1**：YuShan 加 `--version`~~ | ✅ **已完成**（YuShan `4962298`）：`--version` ⇒ `ys-coding-agent 0.0.1`，退出 0，stderr 零字节 |
 | **2** | **B1**：`translate.ts` + fixture 单测 | 用**录制好的** NDJSON 跑通映射表，不依赖真实模型 |
 | **3** | **B2**：`adapter.ts` + `argv.ts` + prepare-run 测试 | 手工 `--agent yushan` 跑通单轮 |
 | **4** | **B4**：`agentKind` 全线接入（§7 清单） | profile 能被创建、能启动、`/status` 正确 |
 | **5** | **B5**：`yushan-history.ts` + `/resume` 分支 | `/resume` 能列出并恢复 |
 | **6** | **B3/B6**：模型 env、图片文本 | `/config` 显示「跟随 YuShan」；带图消息能看图 |
-| **7** | **Y2**：YuShan 加 `--` 终止符（可选） | `--json -- --stats` 把 `--stats` 当任务 |
+| **7** | ~~**Y2**：YuShan 加 `--` 终止符~~ | ✅ **已完成**（同一提交）：`--json -- --stats` 把 `--stats` 当任务 |
 
 第 1–3 步完成后，bridge 已经能驱动 YuShan（只是 profile 系统还没正式承认）。
 第 4 步是让 `agentKind` 诚实。
