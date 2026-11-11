@@ -171,6 +171,32 @@ describe('summarizeEndedMeeting', () => {
     await summarizeEndedMeeting(d.args);
     expect(d.sent).toHaveLength(1);
   });
+
+  it('answers from a final_text-only agent (yushan emits no text deltas)', async () => {
+    // Regression: yushan buffers its whole answer and emits a single
+    // `final_text` at the end. A collector that only reads `text` deltas would
+    // answer every meeting question with an empty string, silently.
+    mocks.startRunFlow.mockResolvedValue({
+      ok: true as const,
+      execution: {
+        subscribe: () => ({
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'final_text', content: '只发 final_text 的回答' };
+            yield { type: 'done', terminationReason: 'normal' };
+          },
+        }),
+      },
+      policy: {},
+      cwdRealpath: '/repo',
+    });
+    const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
+    await summarizeEndedMeeting(d.args);
+
+    expect(d.sent).toHaveLength(1);
+    expect(String((d.sent[0]?.input as { markdown: string }).markdown)).toContain(
+      '只发 final_text 的回答',
+    );
+  });
 });
 
 describe('resolveSummaryTarget', () => {

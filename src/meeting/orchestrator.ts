@@ -344,18 +344,20 @@ async function runMeetingAgent(
 
   let answer = '';
   for await (const event of result.execution.subscribe()) {
-    const chunk = textOf(event);
-    if (chunk) answer += chunk;
+    // `text` deltas accumulate; `final_text` supersedes whatever the deltas
+    // built. Agents that never stream (yushan, and codex when it holds its
+    // message until turn end) only emit `final_text` — reading `text` alone
+    // would silently answer every meeting question with an empty string.
+    if (event.type === 'text') {
+      answer += event.delta;
+    } else if (event.type === 'final_text') {
+      answer = event.content;
+    }
     if (event.type === 'error') {
       log.warn('meeting', 'run-error', { meetingId: session.meetingId });
     }
   }
   return answer.trim();
-}
-
-/** Collect assistant text from the agent event stream. */
-function textOf(event: AgentEvent): string {
-  return event.type === 'text' ? event.delta : '';
 }
 
 export type { MeetingEvent };
