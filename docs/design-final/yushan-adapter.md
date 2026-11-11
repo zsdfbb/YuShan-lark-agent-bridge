@@ -16,7 +16,7 @@ bridge 新增 `agentKind: 'yushan'` 作为与 `claude` / `codex` 并列的第三
 | # | 决策 | 结论 | 理由 |
 |---|---|---|---|
 | 1 | 是否复用 `agentKind: 'codex'` | 新增 `'yushan'`，复用被否 | `sessionCatalogKey` 以 `agentId` 为键（`src/session/catalog.ts:50`），复用会与真 codex 会话撞键；`isValidAgentEntry`（`:250`）与 `assertAgentIdentity`（`:257`）要求 codex 条目必须有 `threadId`，YuShan 没有 |
-| 2 | `sessionId` 还是 `threadId` | `sessionId`，`sessionKind: 'yushan-session'` | 与 claude 的 `--resume <session_id>` 完全同构；`run-flow.ts` 的两处判断只需加一个 `\|\|` 而不新增分支，catalog 的互斥断言也不用改 |
+| 2 | `sessionId` 还是 `threadId` | `sessionId`，`sessionKind: 'yushan-session'` | 与 claude 的 `--resume <session_id>` 完全同构；`run-flow.ts` 的两处判断只需多一个 `||` 分支条件，不改结构；catalog 的互斥断言也不用改 |
 | 3 | 正文逐字流式还是攒到终局 | 攒到终局发一条 `final_text` | bridge 的 `text` 是**累加**语义；YuShan 遇可重试 provider 错误会发 `ModelStreamDiscarded` 并重放整次尝试，已发出的半句撤不回 ⇒ 卡片上出现两份正文 |
 | 4 | 图片走 `--image` flag 还是文本引用 | 文本引用 `- [image: /path]`，`attachmentTransport('yushan') === 'text-ref'` | YuShan 刻意不在输入侧解析图片，由模型自行调 `view_image`；且 prompt 已是单个 argv token，没有额外 flag 面 |
 | 5 | `NoOutput` 译成什么终局 | `normal` | 退出码 75 同时表示 `Cancelled` 与 `NoOutput`，两者语义相反；译成 `interrupted` 会让用户误以为要重试，而重试只会再得一次空 |
@@ -110,16 +110,17 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
 - **无逐字流式**：进度只能从 `thinking` 与 `tool_use` 感知（决策 3 的代价）。
 - **文档义务已落地**：`README.md:39` 与 `README.zh.md` 明确写出「YuShan always runs with
   auto-approve / 不支持 read-only 档」，`README.md:232` 说明权限映射不覆盖 YuShan；
-  `tests/unit/docs/readme-contract.test.ts` 之外另有断言守住这两句。
+  `tests/unit/docs/readme-contract.test.ts` 新增 4 条用例守住这些句子，其中一条专门断言
+  README **不得**声称 yushan 支持只读档。
 
 ## 6. 测试与验证
 
 | 指标 | 数值 |
 |---|---|
-| `pnpm vitest run tests/unit tests/integration` | **787 passed**（107 文件） |
-| 其中 unit / integration | 523 / 264 |
+| `pnpm vitest run tests/unit tests/integration` | **788 passed**（107 文件） |
+| 其中 unit / integration | 524 / 264 |
 | 基线（`1b047de`，补上 `src/ui/generated` 构建产物后实测） | 666（unit 420 + integration 246） |
-| 本轮净增 | 121（787 − 666） |
+| 本轮净增 | 122（788 − 666） |
 | `pnpm typecheck` | 零错 |
 
 > 基线数字注意：直接 checkout `1b047de` 跑会在 3 个文件上收集失败
@@ -134,6 +135,7 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
 | `usesFinalTextState` 改回 `=== 'codex'` | `tests/unit/card/run-state.test.ts` 的 2 个 N3 用例（`is true for yushan …`、`yushan must go through the finalText -> blocks promotion path`） | 2 |
 | `catalog.ts` 的 yushan 分支去掉（只剩 `'claude'`） | `tests/unit/session/catalog.test.ts > stores YuShan sessions in the claude-shaped slot and isolates them from codex`（另带 3 个 integration 用例） | 4 |
 | 会议 `final_text` 收集去掉 | `tests/unit/meeting/summary.test.ts > answers from a final_text-only agent (yushan emits no text deltas)` | 1 |
+| 取消轮的全零 usage 过滤去掉 | `tests/unit/agent/yushan-translate.test.ts > drops an all-zero usage sample from a cancelled run` | 1 |
 
 ## 7. 本轮范围外（明确不做）
 
