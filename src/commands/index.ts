@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import type { LarkChannel, NormalizedMessage } from '@larksuite/channel';
-import { claudeCapability, codexCapability } from '../agent/capability';
+import { capabilityForProfile } from '../agent/capability';
 import { DEFAULT_MODEL, normalizeModelSelection, supportedModels } from '../agent/models';
 import type { AgentAdapter } from '../agent/types';
 import type { ActiveRuns } from '../bot/active-runs';
@@ -63,6 +63,7 @@ import {
   type RunState,
 } from '../card/run-state';
 import { formatRelTime, listRecentSessions, type SessionSummary } from '../session/history';
+import { listYushanHistory, type ListYushanHistoryInput } from '../session/yushan-history';
 import {
   listCodexThreadHistory,
   type CodexThreadHistoryEntry,
@@ -142,6 +143,9 @@ export interface CommandContext {
     options: ListCodexThreadHistoryOptions,
   ) => Promise<CodexThreadHistoryEntry[]>;
   claudeHistoryProvider?: (cwd: string, limit: number) => Promise<SessionSummary[]>;
+  /** Test seam for the yushan history listing. When absent, reads the
+   *  profile's real `yushan-sessions` directory. */
+  yushanHistoryProvider?: (input: ListYushanHistoryInput) => Promise<SessionSummary[]>;
   /** Set when invoked from a CardKit 2.0 form submit. Keys are input `name`s. */
   formValue?: Record<string, unknown>;
   /** True when this invocation came from a card button click rather than a
@@ -593,9 +597,16 @@ async function handleResume(args: string, ctx: CommandContext): Promise<void> {
     return;
   }
 
-  const sessions = await listClaudeResumeHistory(ctx, cwd, limit);
-  const currentSession = ctx.sessions.getRaw(ctx.scope);
+  const sessions = await listSessionResumeHistory(ctx, cwd, limit);
   const identity = ctx.sessionCatalogIdentity;
+  // yushan (like codex) keeps its session id in the catalog, not in the legacy
+  // SessionStore, so "current" must be read from the same place.
+  const currentSessionId =
+    ctx.controls.profileConfig.agentKind === 'yushan'
+      ? ctx.sessionCatalog && identity
+        ? ctx.sessionCatalog.activeFor(identity)?.sessionId
+        : undefined
+      : ctx.sessions.getRaw(ctx.scope)?.sessionId;
   const entries = sessions.map((s) => ({
     sessionId: identity
       ? issueResumeCandidate(identity, { sessionId: s.sessionId })
@@ -604,7 +615,7 @@ async function handleResume(args: string, ctx: CommandContext): Promise<void> {
     preview: s.preview,
     relTime: formatRelTime(s.mtime),
     lineCount: s.lineCount,
-    current: s.sessionId === currentSession?.sessionId,
+    current: s.sessionId === currentSessionId,
   }));
   const card = resumeCard(cwd, entries);
   await ctx.channel.send(ctx.msg.chatId, { card }, commandReplyOptions(ctx));
@@ -627,7 +638,7 @@ async function applyResume(sessionId: string, ctx: CommandContext): Promise<void
       } else {
         ctx.sessionCatalog.upsertActive({
           scopeId: ctx.sessionCatalogIdentity.scopeId,
-          agentId: 'claude',
+          agentId: ctx.sessionCatalogIdentity.agentId,
           cwdRealpath: ctx.sessionCatalogIdentity.cwdRealpath,
           policyFingerprint: ctx.sessionCatalogIdentity.policyFingerprint,
           sessionId: resolved.sessionId!,
@@ -647,9 +658,8 @@ async function applyResume(sessionId: string, ctx: CommandContext): Promise<void
       return;
     }
     ctx.activeRuns.interrupt(ctx.scope);
-    if (ctx.sessionCatalogIdentity.agentId === 'claude') {
-      ctx.sessions.set(ctx.scope, sessionId, ctx.sessionCatalogIdentity.cwdRealpath);
-    }
+    // Codex returned above; every other agent resumes through a sessionId.
+    ctx.sessions.set(ctx.scope, sessionId, ctx.sessionCatalogIdentity.cwdRealpath);
     await reply(ctx, RESUME_APPLIED_REPLY);
     return;
   }
@@ -700,7 +710,7 @@ function consumeResumeCandidate(
     candidate.agentId !== identity.agentId ||
     candidate.cwdRealpath !== identity.cwdRealpath ||
     candidate.policyFingerprint !== identity.policyFingerprint ||
-    (identity.agentId === 'claude' && !candidate.sessionId) ||
+    (identity.agentId !== 'codex' && !candidate.sessionId) ||
     (identity.agentId === 'codex' && !candidate.threadId)
   ) {
     return undefined;
@@ -714,13 +724,25 @@ function pruneResumeCandidates(now = Date.now()): void {
   }
 }
 
-async function listClaudeResumeHistory(
+async function listSessionResumeHistory(
   ctx: CommandContext,
   cwd: string,
   limit: number,
 ): Promise<SessionSummary[]> {
+  if (ctx.controls.profileConfig.agentKind === 'yushan') {
+    const provider = ctx.yushanHistoryProvider ?? listYushanHistory;
+    return provider({ sessionsDir: yushanSessionsDir(ctx), limit });
+  }
   const provider = ctx.claudeHistoryProvider ?? listRecentSessions;
   return provider(cwd, limit);
+}
+
+/**
+ * MUST stay identical to the adapter's `YUSHAN_SESSIONS_DIR`: a directory
+ * mismatch would list sessions that `/resume use` can never actually resume.
+ */
+function yushanSessionsDir(ctx: CommandContext): string {
+  return join(commandProfilePaths(ctx).profileDir, 'yushan-sessions');
 }
 
 async function listCodexResumeHistory(
@@ -772,6 +794,16 @@ function runtimeAccessStatus(
       ),
     };
   }
+  // yushan exposes no sandbox surface at all, so it reports on the permission
+  // axis like claude — derived from the capability's pinned maxAccess.
+  if (profileConfig.agentKind === 'yushan') {
+    return {
+      label: 'permission',
+      value: accessToClaudePermissionMode(
+        capabilityForProfile(profileConfig).permissions.maxAccess,
+      ),
+    };
+  }
   return {
     label: 'sandbox',
     value: `${profileConfig.sandbox.defaultMode}/${profileConfig.sandbox.maxMode}`,
@@ -813,15 +845,20 @@ async function larkCliStatus(ctx: CommandContext): Promise<'app' | 'user-ready' 
 async function handleStatus(_args: string, ctx: CommandContext): Promise<void> {
   const cwd = effectiveWorkspaceCwd(ctx);
   const sess = ctx.sessions.getRaw(ctx.scope);
-  const isCodex = ctx.controls.profileConfig.agentKind === 'codex';
+  const agentKind = ctx.controls.profileConfig.agentKind;
+  const isCodex = agentKind === 'codex';
   const catalogEntry =
-    isCodex && ctx.sessionCatalog && ctx.sessionCatalogIdentity
+    (isCodex || agentKind === 'yushan') && ctx.sessionCatalog && ctx.sessionCatalogIdentity
       ? ctx.sessionCatalog.activeFor(ctx.sessionCatalogIdentity)
       : undefined;
   const card = statusCard({
     profileName: ctx.controls.profile,
     cwd,
-    sessionId: isCodex ? catalogEntry?.threadId : sess?.sessionId,
+    sessionId: isCodex
+      ? catalogEntry?.threadId
+      : agentKind === 'yushan'
+        ? catalogEntry?.sessionId
+        : sess?.sessionId,
     emptySessionText: isCodex ? '(未建立)' : undefined,
     sessionStale: !isCodex && Boolean(cwd && sess && sess.cwd !== cwd),
     agentName: ctx.agent.displayName,
@@ -1128,10 +1165,7 @@ async function handleDoctor(args: string, ctx: CommandContext): Promise<void> {
   }
   doctorLastByOperator.set(rateKey, now);
 
-  const capability =
-    ctx.controls.profileConfig.agentKind === 'codex'
-      ? codexCapability(ctx.controls.profileConfig)
-      : claudeCapability(ctx.controls.profileConfig);
+  const capability = capabilityForProfile(ctx.controls.profileConfig);
   const policy = evaluateRunPolicy({
     scope: {
       source: 'im',

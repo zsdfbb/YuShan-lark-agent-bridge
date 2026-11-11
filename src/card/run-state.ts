@@ -1,4 +1,5 @@
 import type { AgentEvent } from '../agent/types';
+import type { AgentKind } from '../config/profile-schema';
 
 export type ToolStatus = 'running' | 'done' | 'error';
 
@@ -159,6 +160,15 @@ export function markIdleTimeout(state: RunState, minutes: number): RunState {
     footer: null,
     idleTimeoutMinutes: minutes,
   };
+}
+
+/**
+ * Agents that emit only `final_text` (no incremental `text` deltas) need their
+ * `finalText` promoted to blocks before rendering, because `renderText` reads
+ * only `state.blocks`.
+ */
+export function usesFinalTextState(agentKind: AgentKind): boolean {
+  return agentKind !== 'claude';
 }
 
 export function finalizeIfRunning(state: RunState): RunState {

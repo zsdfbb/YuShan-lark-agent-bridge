@@ -5,7 +5,7 @@ import type {
 } from '@larksuite/channel';
 import { createLarkChannel } from '@larksuite/channel';
 import { dirname, join } from 'node:path';
-import { claudeCapability, codexCapability } from '../agent/capability';
+import { capabilityForProfile } from '../agent/capability';
 import { modelLabel, normalizeModelSelection, resolveModelArg } from '../agent/models';
 import {
   buildAgentPrompt,
@@ -25,6 +25,7 @@ import {
   markIdleTimeout,
   markInterrupted,
   reduce,
+  usesFinalTextState,
   type RunState,
 } from '../card/run-state';
 import { renderText } from '../card/text-renderer';
@@ -955,10 +956,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     actorId: firstMsg.senderId,
     ...(threadId ? { threadId } : {}),
   };
-  const capability =
-    controls.profileConfig.agentKind === 'codex'
-      ? codexCapability(controls.profileConfig)
-      : claudeCapability(controls.profileConfig);
+  const capability = capabilityForProfile(controls.profileConfig);
   const flow = await startRunFlow({
     scopeId: scope,
     scope: scopeContext,
@@ -1169,7 +1167,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           renderDone,
           producerStarted: () => producerStarted,
           fallback: async (state) => {
-            if (controls.profileConfig.agentKind === 'codex') return;
+            if (usesFinalTextState(agentKind)) return;
             if (renderText(filterForPrefs(state)).trim() === '') return;
             await channel.send(
               chatId,
@@ -1179,11 +1177,11 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           },
         });
       } catch (err) {
-        if (controls.profileConfig.agentKind !== 'codex') throw err;
+        if (!usesFinalTextState(agentKind)) throw err;
         log.fail('stream', err, { mode: replyMode, step: 'progress-stream' });
       }
       await recallIfEmptyStreamedReply(channel, progress, filterForPrefs(latestState), scope);
-      if (controls.profileConfig.agentKind === 'codex') {
+      if (usesFinalTextState(agentKind)) {
         await sendFinalReply({
           channel,
           chatId,
@@ -1234,7 +1232,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           renderDone,
           producerStarted: () => producerStarted,
           fallback: async (state) => {
-            if (controls.profileConfig.agentKind === 'codex') return;
+            if (usesFinalTextState(agentKind)) return;
             const body = renderText(filterForPrefs(state));
             if (body.trim()) {
               await channel.send(chatId, { markdown: body }, sendOpts);
@@ -1242,11 +1240,11 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           },
         });
       } catch (err) {
-        if (controls.profileConfig.agentKind !== 'codex') throw err;
+        if (!usesFinalTextState(agentKind)) throw err;
         log.fail('stream', err, { mode: replyMode, step: 'progress-stream' });
       }
       await recallIfEmptyStreamedReply(channel, progress, filterForPrefs(latestState), scope);
-      if (controls.profileConfig.agentKind === 'codex') {
+      if (usesFinalTextState(agentKind)) {
         await sendFinalReply({
           channel,
           chatId,
@@ -1274,7 +1272,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
         chatId,
         scope,
         state:
-          controls.profileConfig.agentKind === 'codex'
+          usesFinalTextState(agentKind)
             ? finalAnswerOnlyState(filterForPrefs(finalState))
             : filterForPrefs(finalState),
         replyMode,
