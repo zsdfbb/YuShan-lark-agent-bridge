@@ -111,10 +111,13 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
   `RunFinished` / `RunFailed` 一旦到达就以事件为准。
 - **`stopGraceMs` 下限被抬到 10s**（`MIN_STOP_GRACE_MS`）：配置更低不生效，SIGKILL 仍等满下限。
   原因是 SIGTERM 要让 YuShan 先中止在飞的工具调用，过早 kill 会留下半写的会话文件。
-- **`/resume` 不做 cwd 过滤**：claude 的会话按项目目录分开放（`claudeProjectDir(cwd)`），yushan 只有
+- **`/resume` 不做 cwd 过滤（已知风险）**：claude 的会话按项目目录分开放（`claudeProjectDir(cwd)`），yushan 只有
   **每个 profile 一个扁平目录**（`<profileStateDir>/yushan-sessions`），且会话文件不记录工作目录
   （实测 `meta.workspace` 恒为 `null`，即使在 git 仓库里跑）。所以 yushan 的 `/resume` 会列出该 profile
-  下的所有会话，而不是当前 cwd 的。恢复的会话自带它当初的工具 cwd。
+  下的所有会话，而不是当前 cwd 的。
+  实测确认：工具**跑在 `--resume` 那个进程的 cwd**，不是会话创建时的 cwd（在 `/tmp/ys-cwd/A` 建的会话，
+  从 `/tmp/ys-cwd/B` 恢复后读 `marker.txt` 得到 B 的内容）。因此跨 cwd 恢复会让 agent 带着旧目录的对话
+  历史去操作新目录的文件。
 - **无逐字流式**：进度只能从 `thinking` 与 `tool_use` 感知（决策 3 的代价）。
 - **文档义务已落地**：`README.md:39` 与 `README.zh.md` 明确写出「YuShan always runs with
   auto-approve / 不支持 read-only 档」，`README.md:232` 说明权限映射不覆盖 YuShan；

@@ -732,8 +732,10 @@ async function listSessionResumeHistory(
   // yushan keeps one flat session directory per profile and does not record the
   // working directory in its session files (measured: `meta.workspace` is always
   // `null`), so there is nothing to filter on. Listing is therefore *not*
-  // cwd-scoped — unlike claude, whose layout is one directory per project. A
-  // resumed yushan session brings its own tool cwd with it.
+  // cwd-scoped — unlike claude, whose layout is one directory per project.
+  // Measured consequence: resumed tools run in the cwd of the *resuming* process,
+  // not the session's original cwd, so a cross-cwd resume feeds old conversation
+  // history to a new directory.
   if (ctx.controls.profileConfig.agentKind === 'yushan') {
     const provider = ctx.yushanHistoryProvider ?? listYushanHistory;
     return provider({ sessionsDir: yushanSessionsDir(ctx), limit });
