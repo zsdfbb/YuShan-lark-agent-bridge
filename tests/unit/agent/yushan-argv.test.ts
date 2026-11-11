@@ -86,4 +86,26 @@ describe('YuShan argv contract', () => {
     expect(args[args.length - 1]).toBe(prompt);
     expect(args).toHaveLength(5);
   });
+
+  describe('unsafe session ids', () => {
+    // The id is the only data-plane token that sits *before* `--`. A leading
+    // `-` would be swallowed as a flag and shift the prompt, so such ids are
+    // dropped in favour of a fresh run.
+    it.each(['-rf', '--resume', '--json', '-', '  spaces  ', 'has space', '']) (
+      'drops %j instead of letting it shift the argv',
+      (sessionId) => {
+        expect(buildYushanArgs({ sessionId, prompt: 'hi' })).toEqual(['--json', '--', 'hi']);
+      },
+    );
+
+    it('accepts the real timestamp_nanos shape', () => {
+      expect(buildYushanArgs({ sessionId: '1794403057_979860000', prompt: 'hi' })).toEqual([
+        '--json',
+        '--resume',
+        '1794403057_979860000',
+        '--',
+        'hi',
+      ]);
+    });
+  });
 });

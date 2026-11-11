@@ -286,6 +286,36 @@ describe('YuShan NDJSON translator', () => {
     expect(t.drift.unknownEvents).toBe(1);
   });
 
+  it('reports the real reason from an unrecognised error-shaped event', () => {
+    // YuShan's protocol is not exhaustively documented. If it ever emits an
+    // error-looking event we do not model, the fallback's failure message must
+    // carry the actual reason instead of the generic wording.
+    const t = new YushanTranslator();
+    t.translate(envelope({ ModelStreamError: { message: 'provider 503' } }));
+
+    expect(t.drift.unknownEvents).toBe(1);
+    expect(t.finish('failed')).toEqual([
+      {
+        type: 'error',
+        message: 'yushan stream ended before a terminal event: provider 503',
+        terminationReason: 'failed',
+      },
+    ]);
+  });
+
+  it('does not treat a benign unknown event as a failure cause', () => {
+    const t = new YushanTranslator();
+    t.translate(envelope({ DeferredResult: {} }));
+
+    expect(t.finish('failed')).toEqual([
+      {
+        type: 'error',
+        message: 'yushan stream ended before a terminal event',
+        terminationReason: 'failed',
+      },
+    ]);
+  });
+
   it('is idempotent once a terminal event has been emitted', () => {
     const t = new YushanTranslator();
 

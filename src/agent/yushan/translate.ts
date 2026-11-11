@@ -86,10 +86,19 @@ export class YushanTranslator {
       case 'RunFailed':
         return this.translateRunFailed(event);
       default:
-        this.drift.unknownEvents++;
-        log.warn('yushan', 'unknown_event', { eventType: name ?? '<none>' });
+        // YuShan's protocol is not exhaustively documented: keep any
+        // error-shaped payload so `finish('failed')` can report the real
+        // reason instead of the generic "ended before a terminal event".
+        this.recordUnknownEvent(name, event);
         return [];
     }
+  }
+
+  private recordUnknownEvent(name: string | undefined, event: Record<string, unknown>): void {
+    this.drift.unknownEvents++;
+    log.warn('yushan', 'unknown_event', { eventType: name ?? '<none>' });
+    const detail = errorDetailOf(event);
+    if (detail) this.lastNonTerminalError = detail;
   }
 
   /** Fallback for a stream that ended without a terminal event. Idempotent. */
@@ -252,9 +261,19 @@ function usageEvent(raw: unknown): AgentEvent | undefined {
   return event;
 }
 
+/**
+ * `Cancelled` is the only stop reason that maps to `interrupted`. Everything
+ * else — including `NoOutput`, which shares exit code 75 with `Cancelled` — is
+ * a normal completion. Switching on the exit code instead would turn an empty
+ * answer into a spurious interruption.
+ */
 function terminationReasonFor(stopReason: string | undefined): 'normal' | 'interrupted' {
   if (stopReason === 'Cancelled') return 'interrupted';
-  if (stopReason && NORMAL_STOP_REASONS.has(stopReason)) return 'normal';
+  // Any stop reason outside the known set is an unknown-protocol signal, but
+  // the stream did finish, so it is still a normal termination.
+  if (stopReason && !NORMAL_STOP_REASONS.has(stopReason)) {
+    log.warn('yushan', 'unknown_stop_reason', { stopReason });
+  }
   return 'normal';
 }
 
@@ -277,6 +296,23 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Best-effort extraction of a human-readable reason from an unrecognised
+ * envelope event. Only fires for error-shaped payloads (`{SomeError:{message}}`
+ * or `{SomeError:"text"}`); anything else yields `undefined` so a merely
+ * unknown-but-benign event never gets mistaken for a failure cause.
+ */
+function errorDetailOf(event: Record<string, unknown>): string | undefined {
+  const name = eventName(event);
+  if (!name || !/error|fail/i.test(name)) return undefined;
+  const payload = event[name];
+  if (typeof payload === 'string') return truncate(payload, 500);
+  const body = recordValue(payload);
+  const message =
+    stringValue(body?.message) ?? stringValue(body?.error) ?? stringValue(body?.reason);
+  return message ? truncate(message, 500) : undefined;
 }
 
 function stringifyOutput(value: unknown): string {

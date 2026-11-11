@@ -89,6 +89,10 @@ export class YushanAdapter implements AgentAdapter {
   constructor(opts: YushanAdapterOptions) {
     this.binary = opts.binary;
     this.profileStateDir = opts.profileStateDir;
+    // Cost of the floor, stated explicitly: a configured `agentStopGraceMs`
+    // below 10s cannot shorten a stop for yushan — SIGKILL waits the full
+    // floor. The floor exists because SIGTERM makes YuShan abort in-flight
+    // tool calls, and killing it earlier leaves a half-written session file.
     this.defaultStopGraceMs = Math.max(opts.stopGraceMs ?? 5000, MIN_STOP_GRACE_MS);
     this.larkChannel = opts.larkChannel;
   }
@@ -165,12 +169,14 @@ export class YushanAdapter implements AgentAdapter {
       Buffer.concat(stderrChunks).toString('utf8').trim().slice(0, 500);
 
     let stopReason: YushanFinishReason | undefined;
-    child.on('error', (err) => {
+    const onError = (err: Error): void => {
       runtimeError = err;
-    });
-    child.on('exit', (code, signal) => {
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
       log.info('agent', 'exit', { pid: child.pid ?? null, code, signal });
-    });
+    };
+    child.on('error', onError);
+    child.on('exit', onExit);
     child.stdin.on('error', (err) => {
       log.warn('agent', 'stdin-error', { message: err.message });
     });
@@ -181,7 +187,10 @@ export class YushanAdapter implements AgentAdapter {
 
     return {
       runId: opts.runId,
-      events: createEventStream(child, stderrTail, () => runtimeError, () => stopReason),
+      events: createEventStream(child, stderrTail, () => runtimeError, () => stopReason, () => {
+        child.removeListener('error', onError);
+        child.removeListener('exit', onExit);
+      }),
       async stop() {
         if (child.exitCode !== null || child.signalCode !== null) return;
         stopReason = 'interrupted';
@@ -230,9 +239,11 @@ async function* createEventStream(
   stderrTail: () => string,
   getError: () => Error | null,
   getStopReason: () => YushanFinishReason | undefined,
+  detach: () => void,
 ): AsyncGenerator<AgentEvent> {
   const translator = new YushanTranslator();
   if (!child.pid) {
+    detach();
     const err = getError();
     yield {
       type: 'error',
@@ -260,6 +271,9 @@ async function* createEventStream(
     }
   } finally {
     rl.close();
+    // Mirrors the codex/claude adapters: drop this run's listeners so a
+    // generator that returns early does not leave them attached to the child.
+    detach();
   }
 
   if (malformedLines > 0 || translator.drift.unknownEvents > 0 || translator.drift.anomalies > 0) {

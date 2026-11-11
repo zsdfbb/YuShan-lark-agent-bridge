@@ -1,3 +1,16 @@
+import { log } from '../../core/logger';
+
+/** `1794403057_979860000` (timestamp_nanos). Anything else
+ * is either corrupt catalog data or a hostile value, and an id starting with
+ * `-` in particular would be swallowed as a flag *before* the `--` terminator,
+ * shifting the prompt out of its position. Fall back to a fresh run instead.
+ */
+const SESSION_ID_PATTERN = /^[0-9A-Za-z][0-9A-Za-z_-]*$/;
+
+export function isSafeYushanSessionId(value: unknown): boolean {
+  return typeof value === 'string' && SESSION_ID_PATTERN.test(value);
+}
+
 export interface BuildYushanArgsInput {
   /** Existing YuShan session id to resume. Empty/undefined starts a fresh run. */
   sessionId?: string;
@@ -24,7 +37,13 @@ export function buildYushanArgs(input: BuildYushanArgsInput): string[] {
   const args = ['--json'];
 
   if (input.sessionId) {
-    args.push('--resume', input.sessionId);
+    if (isSafeYushanSessionId(input.sessionId)) {
+      args.push('--resume', input.sessionId);
+    } else {
+      // Drop the id rather than let it be parsed as a flag: a fresh run loses
+      // context, but a shifted argv corrupts the prompt.
+      log.warn('yushan', 'unsafe_session_id', { shape: input.sessionId.length });
+    }
   }
 
   args.push('--', input.prompt);
