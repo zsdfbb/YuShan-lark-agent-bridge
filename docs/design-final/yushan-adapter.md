@@ -111,6 +111,10 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
   `RunFinished` / `RunFailed` 一旦到达就以事件为准。
 - **`stopGraceMs` 下限被抬到 10s**（`MIN_STOP_GRACE_MS`）：配置更低不生效，SIGKILL 仍等满下限。
   原因是 SIGTERM 要让 YuShan 先中止在飞的工具调用，过早 kill 会留下半写的会话文件。
+- **`/resume` 不做 cwd 过滤**：claude 的会话按项目目录分开放（`claudeProjectDir(cwd)`），yushan 只有
+  **每个 profile 一个扁平目录**（`<profileStateDir>/yushan-sessions`），且会话文件不记录工作目录
+  （实测 `meta.workspace` 恒为 `null`，即使在 git 仓库里跑）。所以 yushan 的 `/resume` 会列出该 profile
+  下的所有会话，而不是当前 cwd 的。恢复的会话自带它当初的工具 cwd。
 - **无逐字流式**：进度只能从 `thinking` 与 `tool_use` 感知（决策 3 的代价）。
 - **文档义务已落地**：`README.md:39` 与 `README.zh.md` 明确写出「YuShan always runs with
   auto-approve / 不支持 read-only 档」，`README.md:232` 说明权限映射不覆盖 YuShan；
@@ -121,10 +125,10 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
 
 | 指标 | 数值 |
 |---|---|
-| `pnpm vitest run tests/unit tests/integration` | **788 passed**（107 文件） |
-| 其中 unit / integration | 524 / 264 |
+| `pnpm vitest run tests/unit tests/integration` | **792 passed**（107 文件） |
+| 其中 unit / integration | 528 / 264 |
 | 基线（`1b047de`，补上 `src/ui/generated` 构建产物后实测） | 666（unit 420 + integration 246） |
-| 本轮净增 | 122（788 − 666） |
+| 本轮净增 | 126（792 − 666） |
 | `pnpm typecheck` | 零错 |
 
 > 基线数字注意：直接 checkout `1b047de` 跑会在 3 个文件上收集失败
@@ -140,6 +144,7 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
 | `catalog.ts` 的 yushan 分支去掉（只剩 `'claude'`） | `tests/unit/session/catalog.test.ts > stores YuShan sessions in the claude-shaped slot and isolates them from codex`（另带 3 个 integration 用例） | 4 |
 | 会议 `final_text` 收集去掉 | `tests/unit/meeting/summary.test.ts > answers from a final_text-only agent (yushan emits no text deltas)` | 1 |
 | 取消轮的全零 usage 过滤去掉 | `tests/unit/agent/yushan-translate.test.ts > drops an all-zero usage sample from a cancelled run` | 1 |
+| `run-policy` 恢复无条件 `clampAccess` | `tests/unit/policy/run-policy.test.ts` 的 2 个「no sandbox surface」用例 | 2 |
 
 ## 7. 本轮范围外（明确不做）
 

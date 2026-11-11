@@ -729,6 +729,11 @@ async function listSessionResumeHistory(
   cwd: string,
   limit: number,
 ): Promise<SessionSummary[]> {
+  // yushan keeps one flat session directory per profile and does not record the
+  // working directory in its session files (measured: `meta.workspace` is always
+  // `null`), so there is nothing to filter on. Listing is therefore *not*
+  // cwd-scoped — unlike claude, whose layout is one directory per project. A
+  // resumed yushan session brings its own tool cwd with it.
   if (ctx.controls.profileConfig.agentKind === 'yushan') {
     const provider = ctx.yushanHistoryProvider ?? listYushanHistory;
     return provider({ sessionsDir: yushanSessionsDir(ctx), limit });
