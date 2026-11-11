@@ -2,8 +2,9 @@ import { ClaudeAdapter } from '../agent/claude/adapter';
 import { CodexAdapter } from '../agent/codex/adapter';
 import { AgentPreflightError, type AgentAvailability } from '../agent/preflight';
 import type { AgentAdapter } from '../agent/types';
+import { YushanAdapter } from '../agent/yushan/adapter';
 import type { AppPaths } from '../config/app-paths';
-import type { AgentKind, ProfileConfig } from '../config/profile-schema';
+import { isAgentKind, type AgentKind, type ProfileConfig } from '../config/profile-schema';
 import type { AcquiredRuntimeLock } from './locks';
 
 /**
@@ -49,18 +50,43 @@ export function createRuntimeAgent(
       larkChannel,
     });
   }
+  if (profileConfig.agentKind === 'yushan') {
+    return new YushanAdapter({
+      binary: process.env.LARK_CHANNEL_YUSHAN_BIN ?? DEFAULT_YUSHAN_BIN,
+      profileStateDir: appPaths.profileDir,
+      ...(larkChannel ? { larkChannel } : {}),
+    });
+  }
   return new ClaudeAdapter({ larkChannel });
+}
+
+/** Default CLI name probed when no explicit yushan binary is configured. */
+const DEFAULT_YUSHAN_BIN = 'ys-coding-agent';
+
+/** The executable each agent kind is expected to provide. */
+function agentBinaryCommand(agentId: AgentKind): string {
+  switch (agentId) {
+    case 'codex':
+      return 'codex';
+    case 'yushan':
+      return process.env.LARK_CHANNEL_YUSHAN_BIN ?? DEFAULT_YUSHAN_BIN;
+    case 'claude':
+      return 'claude';
+  }
 }
 
 export async function checkRuntimeAgentAvailability(agent: AgentAdapter): Promise<AgentAvailability> {
   if (agent.checkAvailability) return agent.checkAvailability();
   const ok = await agent.isAvailable();
   if (ok) return { ok: true };
+  // Three-way on purpose: a two-way `id === 'codex' ? … : 'claude'` silently
+  // mislabels every other agent (yushan) as claude in the preflight diagnostic.
+  const agentId = isAgentKind(agent.id) ? agent.id : 'claude';
   const diagnostic = {
     code: 'agent-binary-not-found' as const,
-    agentId: agent.id === 'codex' ? ('codex' as const) : ('claude' as const),
+    agentId,
     agentName: agent.displayName,
-    command: agent.id === 'codex' ? 'codex' : 'claude',
+    command: agentBinaryCommand(agentId),
   };
   return { ok: false, diagnostic, error: new AgentPreflightError(diagnostic) };
 }

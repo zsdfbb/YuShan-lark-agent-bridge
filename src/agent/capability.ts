@@ -39,6 +39,25 @@ export function claudeCapability(profile?: Pick<ProfileConfig, 'permissions'>): 
   };
 }
 
+/**
+ * YuShan capability.
+ *
+ * `permissions.maxAccess` is pinned to `'full'` regardless of the profile: YuShan
+ * exposes no sandbox CLI surface, so a narrower profile setting would be a fake
+ * guarantee (R7). Tool approval is always auto-approved.
+ */
+export function yushanCapability(_profile?: Pick<ProfileConfig, 'permissions'>): AgentCapability {
+  return {
+    agentId: 'yushan',
+    sessionKind: 'yushan-session',
+    promptInjection: 'stdin-prefix',
+    systemPrompt: BRIDGE_SYSTEM_PROMPT,
+    supportsNativeHistory: true,
+    callback: { marker: '__bridge_cb', legacyMarkers: [] },
+    permissions: { maxAccess: 'full' },
+  };
+}
+
 export function codexCapability(profile: Pick<ProfileConfig, 'permissions'>): AgentCapability {
   const maxAccess = profile.permissions.maxAccess;
   return {
@@ -55,4 +74,14 @@ export function codexCapability(profile: Pick<ProfileConfig, 'permissions'>): Ag
       maxAccess,
     },
   };
+}
+
+/** Single dispatch point: profile agentKind → capability. Replaces the
+ *  `agentKind === 'codex' ? codexCapability() : claudeCapability()` ternaries. */
+export function capabilityForProfile(profile: ProfileConfig): AgentCapability {
+  switch (profile.agentKind) {
+    case 'codex': return codexCapability(profile);
+    case 'yushan': return yushanCapability(profile);
+    case 'claude': return claudeCapability(profile);
+  }
 }

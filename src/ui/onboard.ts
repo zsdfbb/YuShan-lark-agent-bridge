@@ -10,6 +10,7 @@ import {
   writeActiveProfile,
 } from '../config/profile-store';
 import type { AgentKind } from '../config/profile-schema';
+import { isAgentKind } from '../config/profile-schema';
 import { secretKeyForApp, type AppConfig, type TenantBrand } from '../config/schema';
 import { buildEncryptedAccountConfig } from '../config/store';
 import { createBootstrapProfileConfig } from '../cli/profile-bootstrap';
@@ -77,7 +78,12 @@ export interface CreateProfileInput {
  */
 export async function onboardCreate(body: unknown, rootDir?: string) {
   const fv = asRecord(body);
-  const agentKind: AgentKind = fv.agentKind === 'codex' ? 'codex' : 'claude';
+  // Explicit whitelist: a two-way ternary silently rewrites any unknown value
+  // (e.g. 'yushan') to claude. Reject instead of guessing.
+  if (fv.agentKind !== undefined && !isAgentKind(fv.agentKind)) {
+    throw new HttpError(400, `unsupported agentKind: ${String(fv.agentKind)}`);
+  }
+  const agentKind: AgentKind = isAgentKind(fv.agentKind) ? fv.agentKind : 'claude';
   const input: CreateProfileInput = {
     profile: String(fv.profile ?? '').trim() || agentKind,
     agentKind,
