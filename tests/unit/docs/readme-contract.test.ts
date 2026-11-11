@@ -90,8 +90,77 @@ describe('README runtime contract', () => {
     expect(docs).toContain('legacy `sandbox`');
     expect(docs).toContain('旧版 `sandbox`');
     expect(docs).not.toContain('"sandbox"');
+    expect(docs).not.toContain('"沙箱"');
+  });
+
+  it('documents yushan as the third supported agent in both READMEs', async () => {
+    const [en, zh] = await readDocsSeparately();
+
+    for (const doc of [en, zh]) {
+      expect(doc).toContain('ys-coding-agent');
+      expect(doc).toContain('YUSHAN_SESSIONS_DIR');
+      expect(doc).toContain('LARK_CHANNEL_YUSHAN_BIN');
+    }
+  });
+
+  it('documents the yushan auto-approve limitation in the matching language', async () => {
+    const [en, zh] = await readDocsSeparately();
+
+    expect(/AutoApprove|auto-approve/.test(en)).toBe(true);
+    expect(zh).toContain('自动批准');
+  });
+
+  it('never claims yushan supports a read-only tier', async () => {
+    const [en, zh] = await readDocsSeparately();
+
+    // A positive claim has no negation inside the same sentence.
+    expect(en).not.toMatch(/\byushan\b(?![^.]*\bnot\b)[^.]*\bsupports?\b[^.]*read-only/i);
+    expect(zh).not.toMatch(/yushan(?![^。]*不)[^。]*只读/);
+
+    for (const phrase of [
+      'YuShan supports read-only',
+      'yushan supports read-only',
+      'yushan supports the read-only',
+      'yushan 支持只读档',
+      'yushan 也支持只读',
+    ]) {
+      expect(`${en}\n${zh}`).not.toContain(phrase);
+    }
+  });
+
+  it('exposes yushan in the web agent selector and detection candidates', async () => {
+    const [types, wizard, detection] = await Promise.all([
+      readFile(new URL('../../../web/src/lib/types.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../../../web/src/views/OnboardWizard.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../../../src/cli/agent-detection.ts', import.meta.url), 'utf8'),
+    ]);
+
+    const agentKindLine = types
+      .split('\n')
+      .find((line) => line.includes('type AgentKind'));
+    expect(agentKindLine).toBeDefined();
+    expect(agentKindLine).toContain('"yushan"');
+
+    expect(wizard).toContain('value="yushan"');
+    expect(wizard).toContain('YuShan');
+
+    const emptyStateLine = wizard
+      .split('\n')
+      .find((line) => line.includes('未检测到已安装的 agent'));
+    expect(emptyStateLine).toBeDefined();
+    expect(emptyStateLine).toContain('yushan');
+
+    expect(detection).toContain('ys-coding-agent');
+    expect(detection).toContain('LARK_CHANNEL_YUSHAN_BIN');
   });
 });
+
+async function readDocsSeparately(): Promise<[string, string]> {
+  return Promise.all([
+    readFile(new URL('../../../README.md', import.meta.url), 'utf8'),
+    readFile(new URL('../../../README.zh.md', import.meta.url), 'utf8'),
+  ]);
+}
 
 async function readDocs(): Promise<string> {
   const [en, zh] = await Promise.all([

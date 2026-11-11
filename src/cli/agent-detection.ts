@@ -50,6 +50,7 @@ export async function detectInstalledAgents(): Promise<DetectedAgent[]> {
   const candidates: Array<{ kind: AgentKind; command: string }> = [
     { kind: 'claude', command: process.env.LARK_CHANNEL_CLAUDE_BIN ?? 'claude' },
     { kind: 'codex', command: process.env.LARK_CHANNEL_CODEX_BIN ?? 'codex' },
+    { kind: 'yushan', command: process.env.LARK_CHANNEL_YUSHAN_BIN ?? 'ys-coding-agent' },
   ];
   const detected: DetectedAgent[] = [];
   for (const candidate of candidates) {

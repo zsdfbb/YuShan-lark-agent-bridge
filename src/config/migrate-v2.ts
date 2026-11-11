@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { resolveAppPaths } from './app-paths';
 import {
   createDefaultProfileConfig,
+  isAgentKind,
   type AgentKind,
   type CodexConfig,
   type RootConfig,
@@ -200,7 +201,7 @@ function activeProcessFromRegistryEntry(entry: RegistryEntry): ActiveBridgeMigra
   if (typeof entry.appId === 'string') active.appId = entry.appId;
   if (typeof entry.tenant === 'string') active.tenant = entry.tenant;
   if (typeof entry.profileName === 'string') active.profileName = entry.profileName;
-  if (entry.agentKind === 'claude' || entry.agentKind === 'codex') active.agentKind = entry.agentKind;
+  if (isAgentKind(entry.agentKind)) active.agentKind = entry.agentKind;
   if (typeof entry.configPath === 'string') active.configPath = entry.configPath;
   if (typeof entry.startedAt === 'string') active.startedAt = entry.startedAt;
   if (typeof entry.version === 'string') active.version = entry.version;

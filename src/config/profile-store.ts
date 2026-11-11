@@ -4,6 +4,7 @@ import * as lockfile from 'proper-lockfile';
 import { writeFileAtomic } from '../platform/atomic-write';
 import { resolveAppPaths } from './app-paths';
 import {
+  isAgentKind,
   normalizeProfileConfig,
   type AgentKind,
   type ProfileConfig,
@@ -296,7 +297,7 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 export function agentKindFromString(value: string | undefined): AgentKind | undefined {
-  if (value === 'claude' || value === 'codex') return value;
   if (value === undefined) return undefined;
+  if (isAgentKind(value)) return value;
   throw new Error(`unsupported agent: ${value}`);
 }

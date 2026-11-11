@@ -1,5 +1,5 @@
 import { spawnProcess } from '../platform/spawn';
-import type { AgentKind } from '../config/profile-schema';
+import { isAgentKind, type AgentKind } from '../config/profile-schema';
 
 export type LocalAgentId = AgentKind;
 
@@ -280,7 +280,7 @@ export function isAgentPreflightDiagnostic(input: unknown): input is AgentPrefli
   return (
     typeof raw.code === 'string' &&
     raw.code.startsWith('agent-') &&
-    (raw.agentId === 'claude' || raw.agentId === 'codex') &&
+    isAgentKind(raw.agentId) &&
     typeof raw.agentName === 'string' &&
     typeof raw.command === 'string'
   );

@@ -43,9 +43,26 @@ const CODEX_MODELS: ModelOption[] = [
   { value: 'o3', label: 'o3' },
 ];
 
+/**
+ * YuShan models. The bridge deliberately ships **no** concrete model catalog
+ * here: the model is decided by the profile's `YUSHAN_MODEL` env or by
+ * YuShan's own provider config, so the picker must never hand YuShan a model
+ * id it may not recognise. Only the "follow default" sentinel is offered.
+ */
+const YUSHAN_MODELS: ModelOption[] = [
+  { value: DEFAULT_MODEL, label: '跟随默认（不指定）' },
+];
+
 /** The model picker options for a profile's agent kind. */
 export function supportedModels(agentKind: AgentKind): ModelOption[] {
-  return agentKind === 'codex' ? CODEX_MODELS : CLAUDE_MODELS;
+  switch (agentKind) {
+    case 'codex':
+      return CODEX_MODELS;
+    case 'yushan':
+      return YUSHAN_MODELS;
+    case 'claude':
+      return CLAUDE_MODELS;
+  }
 }
 
 /** True when the selection means "use the agent default" (no `--model`). */

@@ -2,6 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveAppPaths } from '../../../src/config/app-paths';
+import { acquireAppRuntimeLock, readRuntimeLockMeta } from '../../../src/runtime/locks';
+import { readAndPrune, register } from '../../../src/runtime/registry';
 import {
   SessionCatalog,
   sessionCatalogKey,
@@ -137,6 +140,57 @@ describe('agent-aware session catalog', () => {
     await catalog.flush();
   });
 
+  it('stores YuShan sessions in the claude-shaped slot and isolates them from codex', async () => {
+    const catalogPath = await path();
+    const catalog = new SessionCatalog(catalogPath);
+    const base = {
+      scopeId: 'chat-1',
+      cwdRealpath: '/repo',
+      policyFingerprint: 'fp-1',
+    };
+
+    catalog.upsertActive({
+      ...base,
+      agentId: 'yushan',
+      sessionId: '1794402820_061076000',
+      now: 1000,
+    });
+    catalog.upsertActive({ ...base, agentId: 'codex', threadId: 't1', now: 1000 });
+
+    expect(catalog.activeFor({ ...base, agentId: 'yushan' })).toMatchObject({
+      agentId: 'yushan',
+      sessionId: '1794402820_061076000',
+    });
+    expect(catalog.activeFor({ ...base, agentId: 'yushan' })?.threadId).toBeUndefined();
+    expect(catalog.activeFor({ ...base, agentId: 'codex' })).toMatchObject({ threadId: 't1' });
+    expect(sessionCatalogKey({ ...base, agentId: 'yushan' })).not.toBe(
+      sessionCatalogKey({ ...base, agentId: 'codex' }),
+    );
+
+    await catalog.flush();
+    const reloaded = new SessionCatalog(catalogPath);
+    await reloaded.load();
+    expect(reloaded.activeFor({ ...base, agentId: 'yushan' })).toMatchObject({
+      sessionId: '1794402820_061076000',
+    });
+  });
+
+  it('rejects YuShan entries that carry a threadId', async () => {
+    const catalog = new SessionCatalog(await path());
+
+    expect(() =>
+      catalog.upsertActive({
+        scopeId: 'chat-1',
+        agentId: 'yushan',
+        cwdRealpath: '/repo',
+        policyFingerprint: 'fp-1',
+        threadId: 't1',
+        now: 1000,
+      }),
+    ).toThrow(/YuShan.*sessionId/i);
+    await catalog.flush();
+  });
+
   it('garbage-collects old archived entries, per-scope overflow, and profile overflow', async () => {
     const catalog = new SessionCatalog(await path());
     await catalog.replaceForTest([
@@ -165,6 +219,55 @@ describe('agent-aware session catalog', () => {
     await catalog.flush();
   });
 });
+
+describe('yushan runtime state', () => {
+  afterEach(async () => {
+    await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+  });
+
+  it('round-trips a yushan agentKind through the process registry', async () => {
+    const root = await tempRoot();
+    const registryFile = join(root, 'registry', 'processes.json');
+
+    const entry = await register({
+      appId: 'cli_test',
+      tenant: 'feishu',
+      profileName: 'yushan',
+      agentKind: 'yushan',
+      configPath: join(root, 'config.json'),
+      version: '0.7.1',
+      registryFile,
+    });
+
+    expect(entry.agentKind).toBe('yushan');
+    expect(readAndPrune(registryFile)).toEqual([
+      expect.objectContaining({ id: entry.id, agentKind: 'yushan', profileName: 'yushan' }),
+    ]);
+  });
+
+  it('accepts yushan lock metadata as a valid runtime lock', async () => {
+    const root = await tempRoot();
+    const paths = resolveAppPaths({ rootDir: root, profile: 'yushan' });
+
+    const lock = await acquireAppRuntimeLock(paths, 'cli_test', 'yushan');
+    try {
+      await expect(readRuntimeLockMeta(lock.target)).resolves.toMatchObject({
+        kind: 'app',
+        profile: 'yushan',
+        agentKind: 'yushan',
+        appId: 'cli_test',
+      });
+    } finally {
+      await lock.release();
+    }
+  });
+});
+
+async function tempRoot(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'session-catalog-runtime-'));
+  cleanups.push(() => rm(dir, { recursive: true, force: true }));
+  return dir;
+}
 
 async function path(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'session-catalog-test-'));

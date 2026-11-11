@@ -381,6 +381,43 @@ describe('profile v2 migration', () => {
     expect(next.profiles.claude?.workspaces.default).toBeUndefined();
   });
 
+  it('migrates a legacy config to a YuShan profile without codex configuration', async () => {
+    const root = await makeRoot();
+    await writeJson(join(root, 'config.json'), legacyConfigFixture());
+
+    await migrateV1ToV2({ rootDir: root, profile: 'yushan', agentKind: 'yushan' });
+
+    const next = (await readJson(join(root, 'config.json'))) as RootConfig;
+    expect(next.activeProfile).toBe('yushan');
+    expect(next.profiles.yushan?.agentKind).toBe('yushan');
+    expect(next.profiles.yushan).not.toHaveProperty('codex');
+  });
+
+  it('keeps the yushan agentKind on active registry entries reported as conflicts', async () => {
+    const root = await makeRoot();
+    await writeJson(join(root, 'config.json'), legacyConfigFixture());
+    await writeJson(join(root, 'processes.json'), {
+      entries: [
+        {
+          id: 'yushan-bridge',
+          pid: spawnLiveProcess(),
+          appId: 'cli_test',
+          tenant: 'feishu',
+          profileName: 'yushan',
+          agentKind: 'yushan',
+          configPath: join(root, 'config.json'),
+          startedAt: new Date().toISOString(),
+          version: '0.1.32',
+        },
+      ],
+    });
+
+    await expect(migrateV1ToV2({ rootDir: root, profile: 'claude' })).rejects.toMatchObject({
+      name: 'ActiveBridgeMigrationConflictError',
+      processes: [expect.objectContaining({ id: 'yushan-bridge', agentKind: 'yushan' })],
+    });
+  });
+
   it('migrates a legacy config to Codex through the migrate command', async () => {
     const root = await makeRoot();
     const codex = await writeVersionExecutable(root, 'codex', 'codex 1.2.3');

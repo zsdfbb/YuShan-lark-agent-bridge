@@ -4,10 +4,13 @@ import {
   clampAccess,
 } from '../../../src/config/permissions';
 import {
+  AGENT_KINDS,
   createDefaultProfileConfig,
   effectiveLarkCliIdentity,
+  isAgentKind,
   normalizeProfileConfig,
 } from '../../../src/config/profile-schema';
+import { agentKindFromString } from '../../../src/config/profile-store';
 
 const app = {
   id: 'cli_test',
@@ -571,6 +574,47 @@ describe('profile schema', () => {
     expect(cfg.permissions).toMatchObject({
       defaultAccess: 'workspace',
       maxAccess: 'workspace',
+    });
+  });
+
+  describe('yushan agent kind', () => {
+    it('exposes yushan in AGENT_KINDS and narrows with isAgentKind', () => {
+      expect(AGENT_KINDS).toEqual(['claude', 'codex', 'yushan']);
+      expect(isAgentKind('yushan')).toBe(true);
+      expect(isAgentKind('bogus')).toBe(false);
+      expect(isAgentKind(undefined)).toBe(false);
+    });
+
+    it('accepts a yushan profile without codex configuration', () => {
+      const cfg = createDefaultProfileConfig({ agentKind: 'yushan', accounts: { app } });
+      expect(cfg.agentKind).toBe('yushan');
+      expect(cfg).not.toHaveProperty('codex');
+
+      const normalized = normalizeProfileConfig({
+        schemaVersion: 2,
+        agentKind: 'yushan',
+        accounts: { app },
+      });
+      expect(normalized.agentKind).toBe('yushan');
+      expect(normalized).not.toHaveProperty('codex');
+    });
+
+    it('still requires codex configuration for codex profiles', () => {
+      expect(() =>
+        normalizeProfileConfig({ schemaVersion: 2, agentKind: 'codex', accounts: { app } }),
+      ).toThrow(/codex profile requires codex configuration/);
+    });
+
+    it('rejects unknown agent kinds with the widened message', () => {
+      expect(() =>
+        normalizeProfileConfig({ schemaVersion: 2, agentKind: 'bogus', accounts: { app } }),
+      ).toThrow(/yushan/);
+    });
+
+    it('maps agent kinds from CLI strings', () => {
+      expect(agentKindFromString('yushan')).toBe('yushan');
+      expect(agentKindFromString(undefined)).toBeUndefined();
+      expect(() => agentKindFromString('bogus')).toThrow(/unsupported agent: bogus/);
     });
   });
 });

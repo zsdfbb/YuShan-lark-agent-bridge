@@ -45,4 +45,53 @@ describe('agent model catalog', () => {
     expect(modelLabel('claude', 'claude-opus-4-8')).toBe('Opus 4.8（最新）');
     expect(modelLabel('claude', DEFAULT_MODEL)).toContain('跟随默认');
   });
+
+  describe('yushan branch', () => {
+    it('offers only the default sentinel — no concrete model catalog', () => {
+      const yushan = supportedModels('yushan');
+      expect(yushan).toHaveLength(1);
+      expect(yushan[0]?.value).toBe(DEFAULT_MODEL);
+    });
+
+    it('never leaks another agent\'s model ids into the yushan catalog', () => {
+      const values = supportedModels('yushan').map((m) => m.value);
+      expect(values.filter((v) => v.startsWith('claude-') || v.startsWith('gpt-'))).toEqual([]);
+    });
+
+    it('drops a cross-agent leftover instead of forwarding it to YuShan', () => {
+      expect(resolveModelArg('yushan', 'claude-opus-4-8')).toBeUndefined();
+    });
+
+    it('omits the model argument for the default sentinel', () => {
+      expect(resolveModelArg('yushan', DEFAULT_MODEL)).toBeUndefined();
+    });
+
+    it('normalizes a stale Claude selection back to the default option', () => {
+      expect(normalizeModelSelection('yushan', 'claude-opus-4-8')).toBe(DEFAULT_MODEL);
+    });
+
+    it('labels the default option for the saved-config card', () => {
+      expect(modelLabel('yushan', DEFAULT_MODEL)).toBe('跟随默认（不指定）');
+    });
+  });
+
+  it('regression: claude and codex catalogs are unchanged', () => {
+    expect(supportedModels('claude')).toHaveLength(7);
+    expect(supportedModels('claude').map((m) => m.value)).toEqual([
+      DEFAULT_MODEL,
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+      'claude-sonnet-5',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5',
+      'opusplan',
+    ]);
+    expect(supportedModels('codex')).toHaveLength(4);
+    expect(supportedModels('codex').map((m) => m.value)).toEqual([
+      DEFAULT_MODEL,
+      'gpt-5-codex',
+      'gpt-5',
+      'o3',
+    ]);
+  });
 });

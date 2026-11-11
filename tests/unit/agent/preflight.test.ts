@@ -7,6 +7,7 @@ import {
   AgentPreflightError,
   checkAgentVersion,
   formatAgentPreflightError,
+  isAgentPreflightDiagnostic,
 } from '../../../src/agent/preflight.js';
 
 describe('agent preflight diagnostics', () => {
@@ -147,6 +148,25 @@ describe('agent preflight diagnostics', () => {
       expect(message).toContain(`错误码：${code}`);
       expect(message).not.toContain('/opt/homebrew');
     }
+  });
+
+  it('recognizes a YuShan preflight diagnostic', () => {
+    expect(
+      isAgentPreflightDiagnostic({
+        code: 'agent-binary-not-found',
+        agentId: 'yushan',
+        agentName: 'YuShan',
+        command: 'ys-coding-agent',
+      }),
+    ).toBe(true);
+    expect(
+      isAgentPreflightDiagnostic({
+        code: 'agent-binary-not-found',
+        agentId: 'bogus',
+        agentName: 'Bogus',
+        command: 'bogus',
+      }),
+    ).toBe(false);
   });
 });
 

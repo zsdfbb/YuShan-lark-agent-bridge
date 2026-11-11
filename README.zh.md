@@ -23,7 +23,20 @@
 - 本机至少安装并登录一个 agent：
   - Claude Code：`claude`，安装说明：https://docs.anthropic.com/en/docs/claude-code/quickstart
   - Codex CLI：`codex`，安装说明：https://developers.openai.com/codex/cli
+  - YuShan：`ys-coding-agent`（可选的第三种 agent，见下）
 - 一个飞书 / Lark PersonalAgent 应用。首次启动的扫码向导可以帮你创建并绑定。
+
+### 支持的 agent
+
+| Agent | 二进制 | 会话状态 | 工具审批 |
+|---|---|---|---|
+| Claude Code | `claude`（可用 `LARK_CHANNEL_CLAUDE_BIN` 覆盖） | bridge 托管会话 | 按权限映射 |
+| Codex | `codex`（可用 `LARK_CHANNEL_CODEX_BIN` 覆盖） | codex thread | 按权限映射 |
+| YuShan | `ys-coding-agent`（可用 `LARK_CHANNEL_YUSHAN_BIN` 覆盖） | `YUSHAN_SESSIONS_DIR` | 恒为 `AutoApprove` |
+
+YuShan（`ys-coding-agent`）是与 Claude Code、Codex 并列的第三种受支持 agent。把它装到 `PATH` 上，或者用 `LARK_CHANNEL_YUSHAN_BIN` 指向二进制路径，再以 `--agent yushan` 创建或启动 profile。它的会话状态放在 `YUSHAN_SESSIONS_DIR` 目录里，bridge 会把它设成 per-profile 的位置，让不同 profile 的会话历史互相隔离；一般不需要自己配置。
+
+**YuShan 的工具审批恒为自动批准。** 与 Claude Code、Codex 不同，yushan 不支持只读档：无论 `permissions.defaultAccess` / `permissions.maxAccess` 怎么配，工具审批都是 `AutoApprove`。原因是 YuShan 当前没有 sandbox CLI 面，给出窄档只会是假窄档。如果需要只读或限制在工作区内的运行方式，请选 Claude Code 或 Codex。
 
 ## 安装
 
@@ -215,6 +228,8 @@ bridge 会检查所选目录存在、是目录，并且不是 `/`、Home 根、�
 | `full` | `bypassPermissions` | `danger-full-access` |
 | `workspace` | `acceptEdits` | `workspace-write` |
 | `read-only` | `plan` | `read-only` |
+
+这张映射表只适用于 Claude Code 和 Codex。yushan 不走它：即使 profile 设成 `read-only`，工具审批仍然是自动批准（`AutoApprove`）。
 
 旧版 `sandbox` 字段仍可读取。bridge 保存 profile 后，会把该设置迁移为 canonical `permissions`。
 

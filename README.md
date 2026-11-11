@@ -23,7 +23,20 @@ For a product walkthrough, see the [Feishu document](https://larkcommunity.feish
 - At least one local agent installed and logged in:
   - Claude Code: `claude`, see https://docs.anthropic.com/en/docs/claude-code/quickstart
   - Codex CLI: `codex`, see https://developers.openai.com/codex/cli
+  - YuShan: `ys-coding-agent` (optional third agent, see below)
 - A Feishu / Lark **PersonalAgent** app. The first-run QR wizard can create and bind one for you.
+
+### Supported agents
+
+| Agent | Binary | Session state | Tool approval |
+|---|---|---|---|
+| Claude Code | `claude` (override with `LARK_CHANNEL_CLAUDE_BIN`) | bridge-managed session | follows the permission mapping |
+| Codex | `codex` (override with `LARK_CHANNEL_CODEX_BIN`) | codex thread | follows the permission mapping |
+| YuShan | `ys-coding-agent` (override with `LARK_CHANNEL_YUSHAN_BIN`) | `YUSHAN_SESSIONS_DIR` | always `AutoApprove` |
+
+YuShan (`ys-coding-agent`) is the third supported agent, alongside Claude Code and Codex. Install it so that `ys-coding-agent` is on `PATH`, or point `LARK_CHANNEL_YUSHAN_BIN` at the binary and pass `--agent yushan`. Its session state lives in the `YUSHAN_SESSIONS_DIR` directory, which the bridge sets to a per-profile location so session history stays isolated between profiles; you normally do not need to configure it yourself.
+
+**YuShan always runs with auto-approve.** Unlike Claude Code and Codex, YuShan does not support a read-only tier: tool approval is always `AutoApprove`, no matter what `permissions.defaultAccess` / `permissions.maxAccess` say. YuShan currently exposes no sandbox CLI surface, so a narrower tier would be a false one. Choose Claude Code or Codex if you need read-only or workspace-restricted runs.
 
 ## Install
 
@@ -215,6 +228,8 @@ Mode mapping:
 | `full` | `bypassPermissions` | `danger-full-access` |
 | `workspace` | `acceptEdits` | `workspace-write` |
 | `read-only` | `plan` | `read-only` |
+
+This mapping applies to Claude Code and Codex. YuShan is not covered by it: its tool approval is always `AutoApprove`, including when the profile is set to `read-only`.
 
 The legacy `sandbox` field is still readable for old configs. After the bridge saves the profile, it migrates that setting to canonical `permissions`.
 
