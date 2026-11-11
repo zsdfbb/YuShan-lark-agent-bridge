@@ -13,7 +13,14 @@ import {
   type PermissionSource,
 } from './permissions';
 
-export type AgentKind = 'claude' | 'codex';
+export const AGENT_KINDS = ['claude', 'codex', 'yushan'] as const;
+export type AgentKind = (typeof AGENT_KINDS)[number];
+
+/** 运行时收窄：判断任意值是否是合法 agentKind。 */
+export function isAgentKind(value: unknown): value is AgentKind {
+  return typeof value === 'string' && (AGENT_KINDS as readonly string[]).includes(value);
+}
+
 export type SandboxMode = CodexSandboxMode;
 export type { AccessMode, PermissionConfig, PermissionSource };
 

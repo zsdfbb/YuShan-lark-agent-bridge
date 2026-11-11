@@ -1,9 +1,9 @@
 import type { AccessMode } from '../config/permissions';
-import type { ProfileConfig } from '../config/profile-schema';
+import type { AgentKind, ProfileConfig } from '../config/profile-schema';
 import { BRIDGE_SYSTEM_PROMPT } from './bridge-system-prompt';
 
-export type AgentCapabilityId = 'claude' | 'codex';
-export type AgentSessionKind = 'claude-session' | 'codex-thread';
+export type AgentCapabilityId = AgentKind;
+export type AgentSessionKind = 'claude-session' | 'codex-thread' | 'yushan-session';
 export type PromptInjectionMode = 'append-system-prompt' | 'stdin-prefix';
 
 export interface AgentCapability {

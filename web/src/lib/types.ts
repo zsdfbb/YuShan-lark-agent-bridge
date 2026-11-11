@@ -1,4 +1,6 @@
-export type AgentKind = "claude" | "codex";
+// 与 src/config/profile-schema.ts 的 AGENT_KINDS 保持同步。
+// web 是独立构建（不能跨目录 import src/），故此处保留本地字面量；新增 agentKind 时两处都要改。
+export type AgentKind = "claude" | "codex" | "yushan";
 export type ProfileMode = "personal" | "team";
 export type LarkCliIdentity = "bot-only" | "user-default";
 export type MessageReply = "card" | "markdown" | "text";

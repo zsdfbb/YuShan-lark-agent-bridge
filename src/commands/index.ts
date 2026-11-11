@@ -36,6 +36,7 @@ import {
   getShowToolCalls,
 } from '../config/schema';
 import type {
+  AgentKind,
   LarkCliIdentityPreset,
   ProfileAccess,
   ProfileConfig,
@@ -153,7 +154,7 @@ type Handler = (args: string, ctx: CommandContext) => Promise<void>;
 
 interface ResumeCandidate {
   scopeId: string;
-  agentId: 'claude' | 'codex';
+  agentId: AgentKind;
   cwdRealpath: string;
   policyFingerprint: string;
   sessionId?: string;

@@ -2,7 +2,9 @@ import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { delimiter, extname, isAbsolute, join } from 'node:path';
 
-export type AgentKind = 'claude' | 'codex';
+import type { AgentKind } from '../config/profile-schema';
+
+export type { AgentKind };
 
 export interface DetectedAgent {
   kind: AgentKind;

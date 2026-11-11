@@ -1,6 +1,7 @@
 import { spawnProcess } from '../platform/spawn';
+import type { AgentKind } from '../config/profile-schema';
 
-export type LocalAgentId = 'claude' | 'codex';
+export type LocalAgentId = AgentKind;
 
 export type AgentPreflightErrorCode =
   | 'agent-binary-not-found'
