@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CardActionEvent, NormalizedMessage } from '@larksuite/channel';
-import { claudeCapability, codexCapability } from '../../../src/agent/capability.js';
+import { capabilityForProfile } from '../../../src/agent/capability.js';
 import { ActiveRuns } from '../../../src/bot/active-runs.js';
 import type { ChatModeCache } from '../../../src/bot/chat-mode-cache.js';
 import { PendingQueue } from '../../../src/bot/pending-queue.js';
@@ -30,6 +30,7 @@ interface Harness {
   identity: SessionCatalogIdentity;
   claudeHistory: SessionSummary[];
   codexHistory: CodexThreadHistoryEntry[];
+  yushanHistory: SessionSummary[];
   activeRuns: ActiveRuns;
   pending: PendingQueue;
   run(content: string, options?: { withCatalogIdentity?: boolean; chatMode?: 'p2p' | 'group' | 'topic' }): Promise<boolean>;
@@ -166,6 +167,78 @@ describe('agent-aware resume commands', () => {
     expect(lastMarkdown(h.channel)).toContain('请先用 `/resume`');
   });
 
+  it('lists YuShan sessions through the sessionId channel', async () => {
+    const h = await createHarness('yushan');
+    h.yushanHistory.push(
+      yushanSession(YUSHAN_ALPHA, 'alpha prompt', 1_700_000_100_000),
+      yushanSession(YUSHAN_BETA, 'beta prompt', 1_700_000_000_000),
+    );
+
+    await expect(h.run('/resume')).resolves.toBe(true);
+
+    const card = lastContent(h.channel);
+    const rendered = JSON.stringify(card);
+    expect(rendered).toContain('alpha prompt');
+    expect(rendered).toContain('beta prompt');
+    // Raw ids stay behind nonces, exactly like Claude/Codex.
+    expect(rendered).not.toContain(YUSHAN_ALPHA);
+    expect(rendered).not.toContain(YUSHAN_BETA);
+    expect(resumeArgsFromCard(card)).toHaveLength(2);
+  });
+
+  it('applies a YuShan resume candidate as a catalog sessionId', async () => {
+    const h = await createHarness('yushan');
+    h.yushanHistory.push(
+      yushanSession(YUSHAN_ALPHA, 'alpha prompt', 1_700_000_100_000),
+      yushanSession(YUSHAN_BETA, 'beta prompt', 1_700_000_000_000),
+    );
+
+    await expect(h.run('/resume')).resolves.toBe(true);
+    const nonces = resumeArgsFromCard(lastContent(h.channel));
+    expect(nonces).toHaveLength(2);
+
+    await expect(h.run(`/resume use ${nonces[1]}`)).resolves.toBe(true);
+
+    const active = h.catalog.activeFor(h.identity);
+    expect(active?.agentId).toBe('yushan');
+    expect(active?.sessionId).toBe(YUSHAN_BETA);
+    expect(active?.threadId).toBeUndefined();
+    expect(lastMarkdown(h.channel)).toContain('已完成');
+  });
+
+  it('never mentions Codex when a YuShan profile has no history', async () => {
+    const h = await createHarness('yushan');
+
+    await expect(h.run('/resume')).resolves.toBe(true);
+
+    const rendered = lastContentString(h.channel);
+    expect(rendered).toContain('此 cwd 下没有历史会话');
+    expect(rendered).not.toContain('Codex');
+  });
+
+  it('reads the YuShan session id from the catalog, not the legacy SessionStore', async () => {
+    const h = await createHarness('yushan');
+    h.sessions.set('chat-1', 'legacy-store-session', h.identity.cwdRealpath);
+    h.catalog.upsertActive({ ...h.identity, sessionId: YUSHAN_BETA, now: 1000 });
+
+    await expect(h.run('/status')).resolves.toBe(true);
+
+    const status = lastContentString(h.channel);
+    expect(status).toContain(YUSHAN_BETA.slice(0, 8));
+    expect(status).not.toContain('legacy-s');
+  });
+
+  it('reports YuShan runtime access on the permission axis, not sandbox', async () => {
+    const h = await createHarness('yushan');
+
+    await expect(h.run('/status')).resolves.toBe(true);
+
+    const status = lastContentString(h.channel);
+    expect(status).toContain('**permission**');
+    expect(status).toContain('bypassPermissions');
+    expect(status).not.toContain('**sandbox**');
+  });
+
   it('does not fall back to legacy SessionStore when Codex catalog identity is missing', async () => {
     const h = await createHarness('codex');
 
@@ -277,6 +350,7 @@ async function createHarness(
   const catalog = new SessionCatalog(join(tmp.profile, 'session-catalog.json'));
   const claudeHistory: SessionSummary[] = [];
   const codexHistory: CodexThreadHistoryEntry[] = [];
+  const yushanHistory: SessionSummary[] = [];
   const activeRuns = new ActiveRuns();
   const pending = new PendingQueue(60_000, () => {});
   const agent = createFakeAgent();
@@ -322,6 +396,7 @@ async function createHarness(
       controls,
       claudeHistoryProvider: async () => claudeHistory,
       codexHistoryProvider: async () => codexHistory,
+      yushanHistoryProvider: async () => yushanHistory,
     });
 
   const dispatchResumeArg = (arg: string): Promise<void> =>
@@ -354,6 +429,7 @@ async function createHarness(
     identity,
     claudeHistory,
     codexHistory,
+    yushanHistory,
     activeRuns,
     pending,
     run,
@@ -382,7 +458,7 @@ async function commandIdentity(
 ): Promise<SessionCatalogIdentity> {
   const workspace = await resolveWorkingDirectory(cwd);
   if (!workspace.ok) throw new Error(workspace.userVisible);
-  const capability = agentKind === 'codex' ? codexCapability(profileConfig) : claudeCapability(profileConfig);
+  const capability = capabilityForProfile(profileConfig);
   const access = canUseDm(profileConfig, controls, 'ou-user');
   const policy = evaluateRunPolicy({
     scope: {
@@ -482,6 +558,14 @@ function resumeArgsFromCard(card: unknown): string[] {
   };
   visit(card);
   return out;
+}
+
+// Opaque YuShan session ids are file names (`<epoch>_<counter>`), never dates.
+const YUSHAN_ALPHA = '1794403057_979860000';
+const YUSHAN_BETA = '1794403100_979860001';
+
+function yushanSession(sessionId: string, preview: string, mtime: number): SessionSummary {
+  return { sessionId, preview, mtime, lineCount: 3 };
 }
 
 function codexThread(
