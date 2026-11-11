@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { resolveAppPaths } from './app-paths';
 import {
   createDefaultProfileConfig,
+  DEFAULT_AGENT_KIND,
   isAgentKind,
   type AgentKind,
   type CodexConfig,
@@ -120,7 +121,7 @@ export async function migrateV1ToV2(opts: MigrateV2Options = {}): Promise<Migrat
   const legacyDefaultWorkspace = opts.workspace
     ? await resolveBootstrapWorkspace(opts.workspace)
     : await collectLegacyDefaultWorkspace(paths.rootDir);
-  const agentKind = opts.agentKind ?? 'claude';
+  const agentKind = opts.agentKind ?? DEFAULT_AGENT_KIND;
   const profileConfig = createDefaultProfileConfig({
     agentKind,
     accounts: { app },

@@ -29,7 +29,8 @@ function uniqueName(base: string, existing: string[]): string {
 }
 
 export function OnboardWizard({ onCreated }: { onCreated: (profile: string) => void }) {
-  const [agentKind, setAgentKind] = useState<AgentKind>("claude");
+  // 本 fork 面向 YuShan 适配，向导默认选中它（与后端 DEFAULT_AGENT_KIND 一致）。
+  const [agentKind, setAgentKind] = useState<AgentKind>("yushan");
   const [profileName, setProfileName] = useState("");
   const [botName, setBotName] = useState("");
   const [detected, setDetected] = useState<AgentKind[]>([]);

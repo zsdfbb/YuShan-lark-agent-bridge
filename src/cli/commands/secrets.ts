@@ -2,6 +2,7 @@ import { resolveAppPaths, type AppPaths } from '../../config/app-paths';
 import { getSecret, listSecretIds, removeSecret, setSecret } from '../../config/keystore';
 import { paths } from '../../config/paths';
 import { loadRootConfig, readActiveProfile } from '../../config/profile-store';
+import { DEFAULT_AGENT_KIND } from '../../config/profile-schema';
 import { secretKeyForApp } from '../../config/schema';
 import { listAllProfiles } from '../../runtime/profile-discovery';
 import { promptPassword } from '../prompt';
@@ -180,7 +181,7 @@ async function resolveSecretProfilePaths(opts: SecretProfileOptions): Promise<Ap
   const rootDir = opts.rootDir ?? paths.rootDir;
   const rootPaths = resolveAppPaths({ rootDir });
   const root = await loadRootConfig(rootPaths.configFile);
-  const profile = opts.profile ?? (await readActiveProfile(rootDir)) ?? root?.activeProfile ?? 'claude';
+  const profile = opts.profile ?? (await readActiveProfile(rootDir)) ?? root?.activeProfile ?? DEFAULT_AGENT_KIND;
   if (root && !root.profiles[profile]) throw new Error(`profile not found: ${profile}`);
   return resolveAppPaths({ rootDir, profile });
 }

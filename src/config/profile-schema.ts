@@ -16,6 +16,14 @@ import {
 export const AGENT_KINDS = ['claude', 'codex', 'yushan'] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
+/**
+ * 本 fork 的默认 agent。
+ *
+ * 上游默认是 Claude Code；本项目针对 YuShan 做了适配，所以把它作为开箱默认值。
+ * 新建 profile、首次启动、onboard 向导、进程注册都从这里取值，不要各处硬编码。
+ */
+export const DEFAULT_AGENT_KIND: AgentKind = 'yushan';
+
 /** 运行时收窄：判断任意值是否是合法 agentKind。 */
 export function isAgentKind(value: unknown): value is AgentKind {
   return typeof value === 'string' && (AGENT_KINDS as readonly string[]).includes(value);

@@ -15,7 +15,7 @@ import { basename, dirname, join } from 'node:path';
 import * as lockfile from 'proper-lockfile';
 import { resolveAppPaths } from '../config/app-paths';
 import { paths } from '../config/paths';
-import { isAgentKind, type AgentKind } from '../config/profile-schema';
+import { DEFAULT_AGENT_KIND, isAgentKind, type AgentKind } from '../config/profile-schema';
 import type { TenantBrand } from '../config/schema';
 import { writeFileAtomic } from '../platform/atomic-write';
 import { checkRuntimeLock } from './locks';
@@ -136,8 +136,8 @@ export async function register(args: RegisterArgs): Promise<ProcessEntry> {
     pid: process.pid,
     appId: args.appId,
     tenant: args.tenant,
-    profileName: args.profileName ?? 'claude',
-    agentKind: args.agentKind ?? 'claude',
+    profileName: args.profileName ?? DEFAULT_AGENT_KIND,
+    agentKind: args.agentKind ?? DEFAULT_AGENT_KIND,
     configPath: args.configPath,
     startedAt: new Date().toISOString(),
     version: args.version,

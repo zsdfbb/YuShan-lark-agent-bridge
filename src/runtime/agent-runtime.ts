@@ -4,7 +4,7 @@ import { AgentPreflightError, type AgentAvailability } from '../agent/preflight'
 import type { AgentAdapter } from '../agent/types';
 import { YushanAdapter } from '../agent/yushan/adapter';
 import type { AppPaths } from '../config/app-paths';
-import { isAgentKind, type AgentKind, type ProfileConfig } from '../config/profile-schema';
+import { DEFAULT_AGENT_KIND, isAgentKind, type AgentKind, type ProfileConfig } from '../config/profile-schema';
 import type { AcquiredRuntimeLock } from './locks';
 
 /**
@@ -96,8 +96,8 @@ export function assertReconnectAgentKindUnchanged(
   current: AgentKind | undefined,
   next: AgentKind | undefined,
 ): void {
-  const currentKind = current ?? 'claude';
-  const nextKind = next ?? 'claude';
+  const currentKind = current ?? DEFAULT_AGENT_KIND;
+  const nextKind = next ?? DEFAULT_AGENT_KIND;
   if (nextKind !== currentKind) {
     throw new Error(
       `agent kind cannot change during reconnect (${currentKind} -> ${nextKind}); stop/start is required`,

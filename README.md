@@ -28,18 +28,23 @@ Codex 之外新增第三种 agent，会话、权限展示、`/resume`、`/status
 
 - Node.js **>= 20.12.0**
 - 本机至少安装并登录一个 agent：
+  - YuShan：`ys-coding-agent`（**本 fork 的默认 agent**）
   - Claude Code：`claude`，安装说明：https://docs.anthropic.com/en/docs/claude-code/quickstart
   - Codex CLI：`codex`，安装说明：https://developers.openai.com/codex/cli
-  - YuShan：`ys-coding-agent`（可选的第三种 agent，见下）
 - 一个飞书 / Lark PersonalAgent 应用。首次启动的扫码向导可以帮你创建并绑定。
 
 ### 支持的 agent
 
 | Agent | 二进制 | 会话状态 | 工具审批 |
 |---|---|---|---|
+| YuShan（默认） | `ys-coding-agent`（可用 `LARK_CHANNEL_YUSHAN_BIN` 覆盖） | `YUSHAN_SESSIONS_DIR` | 恒为 `AutoApprove` |
 | Claude Code | `claude`（可用 `LARK_CHANNEL_CLAUDE_BIN` 覆盖） | bridge 托管会话 | 按权限映射 |
 | Codex | `codex`（可用 `LARK_CHANNEL_CODEX_BIN` 覆盖） | codex thread | 按权限映射 |
-| YuShan | `ys-coding-agent`（可用 `LARK_CHANNEL_YUSHAN_BIN` 覆盖） | `YUSHAN_SESSIONS_DIR` | 恒为 `AutoApprove` |
+
+**默认 agent 是 YuShan。** 本 fork 面向 YuShan 适配，所以不带 `--agent` 时默认使用
+`ys-coding-agent`：默认 profile 名也是 `yushan`，扫码向导与 web 创建页的首选项同样默认 YuShan。
+机器上同时装了多个 agent 且处于非交互环境（daemon / CI）时，也会选 YuShan。想用别的，显式传
+`--agent claude` / `--agent codex` 即可，行为与上游一致。
 
 YuShan（`ys-coding-agent`）是与 Claude Code、Codex 并列的第三种受支持 agent。把它装到 `PATH` 上，或者用 `LARK_CHANNEL_YUSHAN_BIN` 指向二进制路径，再以 `--agent yushan` 创建或启动 profile。它的会话状态放在 `YUSHAN_SESSIONS_DIR` 目录里，bridge 会把它设成 per-profile 的位置，让不同 profile 的会话历史互相隔离；一般不需要自己配置。
 
@@ -108,11 +113,12 @@ lark-channel-bridge unregister [--profile <name>]
 
 daemon 日志在 `~/.lark-channel/profiles/<profile>/logs/daemon/`。
 
-### 多 profile：分别运行 Claude 和 Codex
+### 多 profile：分别运行 YuShan、Claude 和 Codex
 
-默认情况下，bridge 使用当前激活的 profile；可以通过 `profile use <name>` 切换。每个 profile 会维护独立的应用凭据、会话、工作目录和日志。只有在需要同时连接多个 PersonalAgent 应用，或分别运行 Claude 和 Codex 时，才需要创建多个 profile：
+默认情况下，bridge 使用当前激活的 profile（默认 `yushan`）；可以通过 `profile use <name>` 切换。每个 profile 会维护独立的应用凭据、会话、工作目录和日志。只有在需要同时连接多个 PersonalAgent 应用，或分别运行不同的 agent 时，才需要创建多个 profile：
 
 ```bash
+lark-channel-bridge start --profile yushan --agent yushan
 lark-channel-bridge start --profile claude --agent claude
 lark-channel-bridge start --profile codex --agent codex
 ```

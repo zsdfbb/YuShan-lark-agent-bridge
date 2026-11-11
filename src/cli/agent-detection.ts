@@ -48,9 +48,10 @@ function pathExts(): string[] {
 
 export async function detectInstalledAgents(): Promise<DetectedAgent[]> {
   const candidates: Array<{ kind: AgentKind; command: string }> = [
+    // 顺序决定自动选中优先级：本 fork 默认 YuShan，所以它排第一。
+    { kind: 'yushan', command: process.env.LARK_CHANNEL_YUSHAN_BIN ?? 'ys-coding-agent' },
     { kind: 'claude', command: process.env.LARK_CHANNEL_CLAUDE_BIN ?? 'claude' },
     { kind: 'codex', command: process.env.LARK_CHANNEL_CODEX_BIN ?? 'codex' },
-    { kind: 'yushan', command: process.env.LARK_CHANNEL_YUSHAN_BIN ?? 'ys-coding-agent' },
   ];
   const detected: DetectedAgent[] = [];
   for (const candidate of candidates) {

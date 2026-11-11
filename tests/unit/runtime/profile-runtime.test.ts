@@ -262,7 +262,7 @@ describe('profile runtime resolver', () => {
       expect(message).toContain(claude);
       expect(message).toContain('codex');
       expect(message).toContain(codex);
-      expect(message).toContain('--agent <claude|codex>');
+      expect(message).toContain('--agent <claude|codex|yushan>');
     } finally {
       process.env.PATH = oldPath;
       if (oldClaude === undefined) {
@@ -278,8 +278,54 @@ describe('profile runtime resolver', () => {
     }
   });
 
-  it('continues first-run bootstrap with the selected local agent when multiple are detected', async () => {
+  it('prefers yushan as the non-interactive default when several agents are installed', async () => {
     const root = await tmpRoot();
+    const bin = join(root, 'bin');
+    await writeExecutable(bin, 'claude');
+    await writeExecutable(bin, 'ys-coding-agent');
+    const oldPath = process.env.PATH;
+    const oldClaude = process.env.LARK_CHANNEL_CLAUDE_BIN;
+    const oldYushan = process.env.LARK_CHANNEL_YUSHAN_BIN;
+    process.env.PATH = bin;
+    delete process.env.LARK_CHANNEL_CLAUDE_BIN;
+    delete process.env.LARK_CHANNEL_YUSHAN_BIN;
+
+    try {
+      // 无 TTY + 未提供 selectAgent ⇒ 回落到默认 agent（yushan），而不是报歧义。
+      // 后续扫码/凭据步骤需要真实 app，故只断言选择了哪个 agent（报错停在那里）。
+      let error: Error | undefined;
+      try {
+        await resolveProfileRuntime({
+          config: join(root, 'config.json'),
+          allowBootstrap: true,
+        });
+      } catch (err) {
+        if (!(err instanceof Error)) throw err;
+        error = err;
+      }
+
+      // 关键断言：不得抛 “检测到多个本地 agent” 的歧义错误。
+      expect(error?.message ?? '').not.toContain('检测到多个本地 agent');
+      expect(error?.message ?? '').toContain('非交互模式无法完成扫码创建应用');
+      // 选中的 profile 目录已按 yushan 建立。
+      const saved = await readFile(join(root, 'config.json'), 'utf8').catch(() => '');
+      expect(saved.includes('"yushan"') || saved === '').toBe(true);
+    } finally {
+      process.env.PATH = oldPath;
+      if (oldClaude === undefined) {
+        delete process.env.LARK_CHANNEL_CLAUDE_BIN;
+      } else {
+        process.env.LARK_CHANNEL_CLAUDE_BIN = oldClaude;
+      }
+      if (oldYushan === undefined) {
+        delete process.env.LARK_CHANNEL_YUSHAN_BIN;
+      } else {
+        process.env.LARK_CHANNEL_YUSHAN_BIN = oldYushan;
+      }
+    }
+  });
+
+  it('continues first-run bootstrap with the selected local agent when multiple are detected', async () => {    const root = await tmpRoot();
     const bin = join(root, 'bin');
     const codex = await writeExecutable(bin, 'codex');
     await writeExecutable(bin, 'claude');

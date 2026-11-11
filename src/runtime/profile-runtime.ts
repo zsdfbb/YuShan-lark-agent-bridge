@@ -30,6 +30,8 @@ import {
 } from '../config/profile-store';
 import {
   createDefaultProfileConfig,
+  DEFAULT_AGENT_KIND,
+  isAgentKind,
   type AgentKind,
   type CreateDefaultProfileConfigInput,
   type ProfileConfig,
@@ -108,14 +110,19 @@ export async function resolveProfileRuntime(
   if (!profile && opts.allowBootstrap) {
     const detected = await detectInstalledAgents();
     if (detected.length === 0) {
-      throw new Error('no supported local agent found; install claude or codex first');
+      throw new Error('no supported local agent found; install claude, codex, or yushan first');
     }
     if (detected.length > 1) {
       const selected = await selectDetectedAgent(detected, opts.selectAgent);
-      if (!selected) {
+      if (selected) {
+        profile = selected;
+      } else if (detected.some((agent) => agent.kind === DEFAULT_AGENT_KIND)) {
+        // 非交互场景（CI / daemon / 无 TTY）下多个 agent 并存：用本 fork 的默认
+        // agent，而不是直接报错——否则机器上装了 claude 时默认值永远不生效。
+        profile = DEFAULT_AGENT_KIND;
+      } else {
         throw new Error(formatAmbiguousAgentSelectionError(detected));
       }
-      profile = selected;
     } else {
       profile = detected[0]?.kind;
     }
@@ -123,7 +130,7 @@ export async function resolveProfileRuntime(
   if (!profile && !opts.allowBootstrap) {
     throw new Error('active profile is required');
   }
-  profile ??= 'claude';
+  profile ??= DEFAULT_AGENT_KIND;
   let appPaths = resolveAppPaths({ rootDir, profile });
   const configPath = opts.config ?? appPaths.configFile;
 
@@ -189,7 +196,7 @@ export async function resolveProfileRuntime(
     assertBootstrapAppMatchesExistingConfig(opts, profile, existing);
     const cfg = await maybeMigratePlaintextSecret(existing, configPath, appPaths);
     const profileConfig = createRuntimeProfileConfig({
-      agentKind: requestedAgent ?? 'claude',
+      agentKind: requestedAgent ?? DEFAULT_AGENT_KIND,
       accounts: cfg.accounts,
       preferences: cfg.preferences,
       secrets: cfg.secrets,
@@ -204,7 +211,7 @@ export async function resolveProfileRuntime(
   if (!opts.allowBootstrap) {
     throw new Error('config not initialized');
   }
-  const bootstrapAgent = resolveBootstrapAgent(requestedAgent, profile) ?? 'claude';
+  const bootstrapAgent = resolveBootstrapAgent(requestedAgent, profile) ?? DEFAULT_AGENT_KIND;
   const workspace = opts.workspace;
   const fresh = await resolveBootstrapAppConfig(opts);
   const encrypted = await encryptedConfigForProfile(fresh, appPaths);
@@ -233,7 +240,7 @@ async function bootstrapProfileIntoExistingRoot(args: {
   configPath: string;
 }): Promise<ProfileRuntime> {
   const { rootConfig, profile, requestedAgent, opts, appPaths, configPath } = args;
-  const bootstrapAgent = resolveBootstrapAgent(requestedAgent, profile) ?? 'claude';
+  const bootstrapAgent = resolveBootstrapAgent(requestedAgent, profile) ?? DEFAULT_AGENT_KIND;
   const workspace = opts.workspace;
   const fresh = await resolveBootstrapAppConfig(opts);
   const encrypted = await encryptedConfigForProfile(fresh, appPaths);
@@ -395,7 +402,10 @@ function resolveBootstrapAgent(
   requestedAgent: AgentKind | undefined,
   profile: string | undefined,
 ): AgentKind | undefined {
-  return requestedAgent ?? (profile === 'codex' ? 'codex' : undefined);
+  // 显式的 `--agent` 优先；否则当 profile 名本身就是一个 agent 种类时（`--profile yushan`
+  // 这类用法），用该种类作为新建 profile 的 agent，不再只特例 codex。
+  if (requestedAgent) return requestedAgent;
+  return isAgentKind(profile) ? profile : undefined;
 }
 
 async function hasLegacyConfig(configPath: string): Promise<boolean> {
@@ -523,7 +533,7 @@ export async function materializeEnvSecretForService(
   const rootDir = opts.config ? dirname(opts.config) : undefined;
   const explicitProfile = opts.profile;
   const activeProfile = explicitProfile ?? (await readActiveProfile(rootDir));
-  let profile = activeProfile ?? 'claude';
+  let profile = activeProfile ?? DEFAULT_AGENT_KIND;
   let appPaths = resolveAppPaths({ rootDir, profile });
   const configPath = opts.config ?? appPaths.configFile;
 
@@ -568,7 +578,7 @@ function formatAmbiguousAgentSelectionError(
 ): string {
   const lines = detected.map((agent) => `  - ${agent.kind}: ${agent.binaryPath}`);
   return [
-    '检测到多个本地 agent，请使用 --agent <claude|codex> 指定要初始化哪一个。',
+    '检测到多个本地 agent，请使用 --agent <claude|codex|yushan> 指定要初始化哪一个。',
     '已检测到：',
     ...lines,
   ].join('\n');
@@ -613,7 +623,9 @@ class UserCancelledError extends Error {
 }
 
 function displayAgentKind(kind: AgentKind): string {
-  return kind === 'claude' ? 'Claude Code' : 'Codex CLI';
+  if (kind === 'claude') return 'Claude Code';
+  if (kind === 'codex') return 'Codex CLI';
+  return 'YuShan';
 }
 
 async function maybeMigrateRootPlaintextSecret(

@@ -17,6 +17,13 @@ afterEach(async () => {
 });
 
 describe('resolveAppPaths', () => {
+  it('defaults to the yushan profile', () => {
+    // 本 fork 把 YuShan 作为开箱默认 agent，默认 profile 名随之改变。
+    const paths = resolveAppPaths({ rootDir: '/tmp/bridge-default' });
+    expect(paths.profile).toBe('yushan');
+    expect(paths.profileDir).toBe('/tmp/bridge-default/profiles/yushan');
+  });
+
   it('keeps root config, active profile, registry, and locks under the user root', async () => {
     const root = await tempRoot();
 

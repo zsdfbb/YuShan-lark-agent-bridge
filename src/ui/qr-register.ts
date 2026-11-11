@@ -4,7 +4,7 @@ import { resolveAppPaths } from '../config/app-paths';
 import { loadRootConfig } from '../config/profile-store';
 import type { TenantBrand } from '../config/schema';
 import type { AgentKind } from '../config/profile-schema';
-import { isAgentKind } from '../config/profile-schema';
+import { DEFAULT_AGENT_KIND, isAgentKind } from '../config/profile-schema';
 import { validateAppCredentials } from '../utils/feishu-auth';
 import { log } from '../core/logger';
 import { HttpError } from './http';
@@ -159,7 +159,7 @@ export async function finishQrRegistration(
   if (requested !== undefined && !isAgentKind(requested)) {
     throw new HttpError(400, `unsupported agentKind: ${String(requested)}`);
   }
-  const agentKind: AgentKind = isAgentKind(requested) ? requested : 'claude';
+  const agentKind: AgentKind = isAgentKind(requested) ? requested : DEFAULT_AGENT_KIND;
   const profile = String(fv.profile ?? '').trim() || s.suggestedProfile || agentKind;
   const created = await writeNewProfile(
     { profile, agentKind, appId: s.app.appId, appSecret: s.app.appSecret, tenant: s.app.tenant },

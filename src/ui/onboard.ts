@@ -10,7 +10,7 @@ import {
   writeActiveProfile,
 } from '../config/profile-store';
 import type { AgentKind } from '../config/profile-schema';
-import { isAgentKind } from '../config/profile-schema';
+import { DEFAULT_AGENT_KIND, isAgentKind } from '../config/profile-schema';
 import { secretKeyForApp, type AppConfig, type TenantBrand } from '../config/schema';
 import { buildEncryptedAccountConfig } from '../config/store';
 import { createBootstrapProfileConfig } from '../cli/profile-bootstrap';
@@ -83,7 +83,7 @@ export async function onboardCreate(body: unknown, rootDir?: string) {
   if (fv.agentKind !== undefined && !isAgentKind(fv.agentKind)) {
     throw new HttpError(400, `unsupported agentKind: ${String(fv.agentKind)}`);
   }
-  const agentKind: AgentKind = isAgentKind(fv.agentKind) ? fv.agentKind : 'claude';
+  const agentKind: AgentKind = isAgentKind(fv.agentKind) ? fv.agentKind : DEFAULT_AGENT_KIND;
   const input: CreateProfileInput = {
     profile: String(fv.profile ?? '').trim() || agentKind,
     agentKind,

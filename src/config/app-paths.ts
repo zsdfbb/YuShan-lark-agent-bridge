@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_AGENT_KIND } from './profile-schema';
 
 export interface ResolveAppPathsOptions {
   rootDir?: string;
@@ -40,7 +41,7 @@ export interface AppPaths {
   appLockFile(appId: string): string;
 }
 
-const DEFAULT_PROFILE = 'claude';
+const DEFAULT_PROFILE = DEFAULT_AGENT_KIND;
 
 export function resolveAppPaths(opts: ResolveAppPathsOptions = {}): AppPaths {
   const rootDir = opts.rootDir ?? process.env.LARK_CHANNEL_HOME ?? join(homedir(), '.lark-channel');
