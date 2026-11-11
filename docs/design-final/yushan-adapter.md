@@ -64,7 +64,7 @@ bridge 新增 `agentKind: 'yushan'` 作为与 `claude` / `codex` 并列的第三
 | `src/commands/index.ts` | `/resume`、`/status`、`/doctor` 的 yushan 分支 + `yushanHistoryProvider` 测试缝 |
 | `src/meeting/orchestrator.ts` | 会议回答兼收 `final_text`（只读 `text` 会让不流式 agent 答空） |
 | `src/ui/onboard.ts`、`src/ui/qr-register.ts` | 修复**静默降级**：未知 kind 原本被三元式改写成 claude，现改为显式拒绝 |
-| `README.md`、`README.zh.md` | 用户可见文档：第三种 agent + 无只读档的事实 |
+| `README.md` | 用户可见文档（已合并为单一中文版）：第三种 agent + 无只读档的事实 |
 
 ## 4. 三条实测确认的关键约束
 
@@ -119,10 +119,11 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
   从 `/tmp/ys-cwd/B` 恢复后读 `marker.txt` 得到 B 的内容）。因此跨 cwd 恢复会让 agent 带着旧目录的对话
   历史去操作新目录的文件。
 - **无逐字流式**：进度只能从 `thinking` 与 `tool_use` 感知（决策 3 的代价）。
-- **文档义务已落地**：`README.md:39` 与 `README.zh.md` 明确写出「YuShan always runs with
-  auto-approve / 不支持 read-only 档」，`README.md:232` 说明权限映射不覆盖 YuShan；
-  `tests/unit/docs/readme-contract.test.ts` 新增 4 条用例守住这些句子，其中一条专门断言
-  README **不得**声称 yushan 支持只读档。
+- **文档义务已落地**：`README.md` 明确写出「YuShan 的工具审批恒为自动批准 / 不支持 read-only 档」，
+  权限映射一节也说明不覆盖 YuShan；`tests/unit/docs/readme-contract.test.ts` 新增 4 条用例守住
+  这些句子，其中一条专门断言 README **不得**声称 yushan 支持只读档。
+  上游原本是中英双 README，本 fork 只保留中文版（单一 `README.md`），契约测试的
+  `readDocsSeparately()` 已改为两次读同一文件，使原先的“各语言各断言一次”仍然成立。
 
 ## 6. 测试与验证
 

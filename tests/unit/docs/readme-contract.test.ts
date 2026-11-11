@@ -156,16 +156,13 @@ describe('README runtime contract', () => {
 });
 
 async function readDocsSeparately(): Promise<[string, string]> {
-  return Promise.all([
-    readFile(new URL('../../../README.md', import.meta.url), 'utf8'),
-    readFile(new URL('../../../README.zh.md', import.meta.url), 'utf8'),
-  ]);
+  // The project ships a single Chinese README (a fork of
+  // zarazhangrui/feishu-claude-code-bridge adapted for YuShan). Both slots point
+  // at the same file so the per-language assertions below still run unchanged.
+  const doc = await readFile(new URL('../../../README.md', import.meta.url), 'utf8');
+  return [doc, doc];
 }
 
 async function readDocs(): Promise<string> {
-  const [en, zh] = await Promise.all([
-    readFile(new URL('../../../README.md', import.meta.url), 'utf8'),
-    readFile(new URL('../../../README.zh.md', import.meta.url), 'utf8'),
-  ]);
-  return `${en}\n${zh}`;
+  return readFile(new URL('../../../README.md', import.meta.url), 'utf8');
 }
