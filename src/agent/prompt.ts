@@ -81,9 +81,16 @@ export interface BuildAgentPromptInput {
   interactiveCards?: BridgePromptInteractiveCard[];
   comment?: BridgePromptComment;
   attachments?: BridgePromptAttachment[];
+  /**
+   * Plain-text references for agents that cannot receive attachment files
+   * themselves (yushan: no input-side image/file parsing). Rendered as a
+   * trailing `## attachments` block after `user_input`.
+   */
+  attachmentRefs?: Array<{ kind: string; path: string }>;
 }
 
 export function buildAgentPrompt(input: BuildAgentPromptInput): string {
+  const attachmentRefs = renderAttachmentRefs(input.attachmentRefs);
   const sections = [
     promptSection('bridge_context', input.context),
     input.instructions && input.instructions.length > 0
@@ -105,9 +112,20 @@ export function buildAgentPrompt(input: BuildAgentPromptInput): string {
         ? { attachments: input.attachments }
         : {}),
     }),
+    attachmentRefs,
   ];
 
   return sections.filter(Boolean).join('\n\n');
+}
+
+/** Renders the `## attachments` block, or `undefined` when there is nothing to
+ *  reference. Each line is exactly `- [<kind>: <path>]` — a stable shape agents
+ *  can grep for. */
+export function renderAttachmentRefs(
+  refs: ReadonlyArray<{ kind: string; path: string }> | undefined,
+): string | undefined {
+  if (!refs || refs.length === 0) return undefined;
+  return ['## attachments', '', ...refs.map((ref) => `- [${ref.kind}: ${ref.path}]`)].join('\n');
 }
 
 export function promptSection(tag: string, value: unknown): string {

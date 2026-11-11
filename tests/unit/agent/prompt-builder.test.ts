@@ -99,6 +99,40 @@ describe('agent prompt builder', () => {
     expect(prompt).not.toContain('<comment_context>');
   });
 
+  it('omits the attachments block when no attachment refs are supplied', () => {
+    const prompt = buildAgentPrompt({
+      context: { chatId: 'oc_dm', chatType: 'p2p', senderId: 'ou_owner', source: 'im' },
+      userInput: 'hello',
+    });
+
+    expect(prompt).not.toContain('## attachments');
+  });
+
+  it('omits the attachments block when attachment refs are empty', () => {
+    const prompt = buildAgentPrompt({
+      context: { chatId: 'oc_dm', chatType: 'p2p', senderId: 'ou_owner', source: 'im' },
+      userInput: 'hello',
+      attachmentRefs: [],
+    });
+
+    expect(prompt).not.toContain('## attachments');
+  });
+
+  it('appends attachment refs after the user input in a fixed line format', () => {
+    const prompt = buildAgentPrompt({
+      context: { chatId: 'oc_dm', chatType: 'p2p', senderId: 'ou_owner', source: 'im' },
+      userInput: 'hello',
+      attachmentRefs: [
+        { kind: 'image', path: '/a.png' },
+        { kind: 'file', path: '/b.docx' },
+      ],
+    });
+
+    expect(prompt).toContain('## attachments');
+    expect(prompt).toContain('- [image: /a.png]\n- [file: /b.docx]');
+    expect(prompt.indexOf('## attachments')).toBeGreaterThan(prompt.indexOf('</user_input>'));
+  });
+
   it('keeps bridge agents inside the current lark-channel profile by default', () => {
     const source = readFileSync(join(process.cwd(), 'src/bot/channel.ts'), 'utf8');
 
