@@ -1,3 +1,4 @@
+import { hasSandboxSurface } from '../agent/capability';
 import type { AgentCapability } from '../agent/capability';
 import {
   accessToClaudePermissionMode,
@@ -104,11 +105,18 @@ export function evaluateRunPolicy(input: RunPolicyInput): RunPolicyResult {
     return reject('required-attachment-rejected', '必需附件未通过校验，已拒绝运行。');
   }
 
-  const accessMode = clampAccess(
-    input.profileConfig.permissions.defaultAccess,
-    input.profileConfig.permissions.maxAccess,
-    input.capability.permissions.maxAccess,
-  );
+  // An agent with no sandbox surface (yushan) cannot honour a narrower profile
+  // setting — its capability already pins `maxAccess` to what it really does.
+  // Clamping against the profile here would report `read-only` in `/status`
+  // while the agent auto-approves every tool call, i.e. the status card would
+  // understate the real blast radius (R7).
+  const accessMode = hasSandboxSurface(input.capability)
+    ? clampAccess(
+        input.profileConfig.permissions.defaultAccess,
+        input.profileConfig.permissions.maxAccess,
+        input.capability.permissions.maxAccess,
+      )
+    : input.capability.permissions.maxAccess;
   const sandbox = accessToCodexSandbox(accessMode);
   const permissionMode = accessToClaudePermissionMode(
     accessMode,

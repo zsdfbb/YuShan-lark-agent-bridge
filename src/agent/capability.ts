@@ -18,7 +18,19 @@ export interface AgentCapability {
   };
   permissions: {
     maxAccess: AccessMode;
+    /**
+     * Whether the agent actually honours a sandbox/permission tier chosen by the
+     * profile. `false` means the agent has no such CLI surface, so its
+     * `maxAccess` is a statement of fact rather than a ceiling — narrowing it
+     * would only misreport what the agent does. Defaults to `true`.
+     */
+    sandboxSurface?: boolean;
   };
+}
+
+/** True unless the capability explicitly declares it has no sandbox surface. */
+export function hasSandboxSurface(capability: AgentCapability): boolean {
+  return capability.permissions.sandboxSurface !== false;
 }
 
 export function claudeCapability(profile?: Pick<ProfileConfig, 'permissions'>): AgentCapability {
@@ -54,7 +66,7 @@ export function yushanCapability(_profile?: Pick<ProfileConfig, 'permissions'>):
     systemPrompt: BRIDGE_SYSTEM_PROMPT,
     supportsNativeHistory: true,
     callback: { marker: '__bridge_cb', legacyMarkers: [] },
-    permissions: { maxAccess: 'full' },
+    permissions: { maxAccess: 'full', sandboxSurface: false },
   };
 }
 

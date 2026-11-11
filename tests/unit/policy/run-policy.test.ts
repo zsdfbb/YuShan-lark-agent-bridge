@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { claudeCapability, codexCapability } from '../../../src/agent/capability';
+import { claudeCapability, codexCapability, yushanCapability } from '../../../src/agent/capability';
 import type { AccessMode } from '../../../src/config/permissions';
 import { createDefaultProfileConfig, type ProfileConfig } from '../../../src/config/profile-schema';
 import {
@@ -61,6 +61,40 @@ describe('run policy', () => {
       expect(result.permissionMode).toBe(permissionMode);
     },
   );
+
+  describe('agent with no sandbox surface (yushan)', () => {
+    // R7: yushan auto-approves every tool call. A narrower profile setting is
+    // not honoured, so reporting a clamped mode would understate the real
+    // blast radius on the status card.
+    it.each(['read-only', 'workspace', 'full'] as const)(
+      'reports full access even when the profile asks for %s',
+      (accessMode) => {
+        const cfg = profile({ permissions: { defaultAccess: accessMode, maxAccess: accessMode } });
+        const result = evaluateRunPolicy({
+          ...baseInput({ profileConfig: cfg }),
+          capability: yushanCapability(cfg),
+        });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error('expected run policy to allow');
+        expect(result.accessMode).toBe('full');
+        expect(result.permissionMode).toBe('bypassPermissions');
+      },
+    );
+
+    it('still clamps for claude, whose sandbox surface is real', () => {
+      // `full` requested, `workspace` ceiling — a legal pair the schema accepts.
+      const cfg = profile({ permissions: { defaultAccess: 'workspace', maxAccess: 'workspace' } });
+      const result = evaluateRunPolicy({
+        ...baseInput({ profileConfig: cfg }),
+        capability: { ...claudeCapability(cfg), permissions: { maxAccess: 'read-only' } },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('expected run policy to allow');
+      expect(result.accessMode).toBe('read-only');
+    });
+  });
 
   it('does not raise access above capability maxAccess', () => {
     const result = evaluateRunPolicy({

@@ -80,6 +80,10 @@ bridge 侧 `usage` 的消费方只做 `reportMetric('tokens_in'/'tokens_out'/…
 `case 'RoundUsage': return [];`，注释指向 C1）。缺 `usage` 字段时不猜 0（`usageEvent` 四个字段
 全 undefined 即返回 `undefined`）。事件顺序固定 `final_text` → `usage` → `done`。
 
+补充（实测）：被 SIGTERM 取消的那一轮 `RunFinished{Cancelled}` 带的 usage **四个计数全为 0**——
+那是「模型没做这些活」，不是「用了 0 token」；报成样本会把 profile 的 token 均值往零拉。
+故全零 usage 直接丢弃（`usageEvent` 的第二个早退），不产出 `usage` 事件。
+
 ### C2 `--resume` 后会话文件被整体重写 ⇒ `/resume` 预览只能用 `title`
 
 实测：`meta.title` 变成**最新一轮**的任务文本（不是会话主题）；`meta.turns` **不可信**
