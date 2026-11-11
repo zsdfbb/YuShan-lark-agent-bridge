@@ -316,6 +316,23 @@ describe('YuShan NDJSON translator', () => {
     ]);
   });
 
+  it('drops an all-zero usage sample from a cancelled run', () => {
+    // Measured: SIGTERM makes YuShan finish with `Cancelled` and every counter
+    // at 0. Emitting that as a sample would drag token averages toward zero.
+    const t = new YushanTranslator();
+    const events = t.translate(
+      envelope({
+        RunFinished: {
+          stop_reason: 'Cancelled',
+          usage: { input_tokens: 0, output_tokens: 0, prompt_cache_hit_tokens: 0, reasoning_tokens: 0 },
+        },
+      }),
+    );
+
+    expect(events.some((event) => event.type === 'usage')).toBe(false);
+    expect(events).toContainEqual({ type: 'done', terminationReason: 'interrupted' });
+  });
+
   it('is idempotent once a terminal event has been emitted', () => {
     const t = new YushanTranslator();
 

@@ -251,6 +251,17 @@ function usageEvent(raw: unknown): AgentEvent | undefined {
   ) {
     return undefined;
   }
+  // Measured: a SIGTERM'd run reports `RunFinished{Cancelled}` with every
+  // counter at 0. Reporting that as a usage sample would drag the profile's
+  // token averages toward zero for work the model never did.
+  if (
+    !inputTokens &&
+    !outputTokens &&
+    !cachedInputTokens &&
+    !reasoningOutputTokens
+  ) {
+    return undefined;
+  }
   const event: AgentEvent = {
     type: 'usage',
     ...(inputTokens !== undefined ? { inputTokens } : {}),
